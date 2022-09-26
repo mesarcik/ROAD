@@ -82,10 +82,10 @@ for epoch in range(1, n_epochs+1):
         loss['loss'].backward()
         optimizer.step()
 
-        running_loss += loss['loss'].item()
+        running_loss += loss['Reconstruction_Loss'].item()
         if (batch_idx) % 20 == 0:
             print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
-                   .format(epoch, n_epochs, batch_idx, total_step, loss['loss'].item()))
+                   .format(epoch, n_epochs, batch_idx, total_step, loss['Reconstruction_Loss'].item()))
     train_loss.append(running_loss/total_step)
     print(f'\ntrain-loss: {np.mean(train_loss):.4f}')
     batch_loss = 0

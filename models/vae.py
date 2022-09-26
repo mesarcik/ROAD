@@ -115,7 +115,7 @@ class VAE(nn.Module):
         """
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return eps * std + mu
+        return mu#eps * std + mu
 
     def forward(self, input: torch.tensor, **kwargs) -> list[torch.tensor]:
         mu, log_var = self.encode(input)
@@ -137,13 +137,13 @@ class VAE(nn.Module):
         mu = args[2]
         log_var = args[3]
 
-        #kld_weight = kwargs['M_N'] # Account for the minibatch samples from the dataset
+        kld_weight = 0.00025
         recons_loss =F.mse_loss(recons, input)
 
 
-        kld_loss = -1 #torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
+        kld_loss = -0.5* torch.mean(torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
 
-        loss = recons_loss #+ kld_loss
+        loss = recons_loss + kld_loss
         return {'loss': loss, 'Reconstruction_Loss':recons_loss.detach(), 'KLD':-kld_loss.detach()}
 
     def sample(self,
