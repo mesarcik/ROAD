@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 
 
 class LOFARDataset(Dataset):
-    def __init__(self, dataset_dir, patch_size, sourceTransform=None, limit =2000):# set default types
+    def __init__(self, dataset_dir, patch_size, sourceTransform=None, limit =200):# set default types
         self.dataset_dir = dataset_dir 
         self.patch_size = patch_size
 
