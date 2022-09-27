@@ -9,32 +9,45 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from matplotlib import pyplot as plt
 
+def get_data(args):
+    with open(args.data_path, 'rb') as f:
+        data, labels, source, ids, frequency_band = cPickle.load(f,encoding='latin')
+
+    labels = np.array([('-').join(l) for l in labels], dtype='object')
+    train_inds = [i for i,l in enumerate(labels) if '' in l]
+    test_inds = [i for i,l in enumerate(labels) if args.anomaly_class in l]
+    train_data, train_labels  = [data[i] for i in  train_inds], labels[train_inds]
+    test_data, test_labels = [data[i] for i in test_inds], labels[test_inds]
+
+    if args.limit != 'None':
+        mask = np.random.randint(low=0, high= len(train_data), size=int(args.limit)) 
+        train_data, train_labels = [train_data[m] for m in mask], train_labels[mask]
+
+    train_dataset = LOFARDataset(train_data,
+            train_labels,
+            args)
+
+    test_dataset = LOFARDataset(test_data,
+            test_labels,
+            args)
+    return train_dataset, test_dataset
+                        
 
 class LOFARDataset(Dataset):
-    def __init__(self, dataset_dir, patch_size, sourceTransform=None, limit =200):# set default types
-        self.dataset_dir = dataset_dir 
-        self.patch_size = patch_size
+    def __init__(self, data:list, labels:np.array, args, sourceTransform=None):# set default types
+        self.patch_size = args.patch_size
+        self.data = data
+        self.labels = labels
 
-        with open(self.dataset_dir, 'rb') as f:
-            self.data, self.labels, self.source, self.ids, self.frequency_band = cPickle.load(f,encoding='latin')
-        
-        self.data, self.labels = self.remove_singles( self.data, self.labels)
-        # TODO: when reshaping we are destroying the frequency band information, when this is necessary I need to change the code
-        self.data = self.reshape(self.data, (256,256))
+        # TODO: when reshaping we are destroying the frequency band information, 
+        #       when this is necessary I need to change the code
+        self.data, self.labels = self.remove_singles(self.data, self.labels)
+        self.data = self.reshape(self.data, (256,256)) 
 
-        ###########################################################################
-        mask = np.random.randint(low=0, high= 12285, size=limit) 
-        self.labels = np.array(self.labels, dtype='object')
-        self.data, self.labels = self.data[mask], self.labels[mask]
-        ###########################################################################
-
-        indxs = np.random.randint(low=0, high= len(self.data), size=16)
         self.data = self.normalise(self.data)
-        #self.data = (self.data - np.min(self.data)) / (np.max(self.data) - np.min(self.data))
-        self.plot_spectra(self.data, indxs, '/tmp/sample')
+        self.plot_spectra(self.data, '/tmp/sample')
         self.data = torch.from_numpy(self.data).permute(0,3,1,2)
         self.data = self.patch(self.data, self.patch_size)
-
 
         self.sourceTransform = sourceTransform
 
@@ -68,7 +81,8 @@ class LOFARDataset(Dataset):
         _data = np.nan_to_num(_data, 0)
         return _data
 
-    def plot_spectra(self, data: np.array, indxs: np.array, loc:str)->None:
+    def plot_spectra(self, data: np.array, loc:str)->None:
+        indxs = np.random.randint(low=0, high= len(self.data), size=16)
         sq = int(np.sqrt(len(indxs)))
         fig, axs = plt.subplots(sq, sq, figsize=(10,10))
         _c = 0

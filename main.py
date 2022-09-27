@@ -8,16 +8,19 @@ from utils.vis import imscatter
 from utils.args import args
 import os
 
-from data import LOFARDataset
+from data import get_data 
 from models import VAE
 from train import train_vae
 
 
 def main():
-    train_dataset = LOFARDataset(args.data_path, 
-            args.patch_size)
+    train_dataset, test_dataset = get_data(args)
 
     train_dataloader = DataLoader(train_dataset, 
+            batch_size=args.batch_size, 
+            shuffle=True)
+
+    test_dataloader = DataLoader(test_dataset, 
             batch_size=args.batch_size, 
             shuffle=True)
 

@@ -4,7 +4,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import numpy as np
 import os
 
-def imscatter(z:np.array, inputs:np.array, path:str, epoch:int, ax=None, zoom=1):
+def imscatter(z:np.array, inputs:np.array, path:str, epoch:int, ax=None, zoom=1)->None:
     """
         code adapted from: https://gist.github.com/feeblefruits/20e7f98a4c6a47075c8bfce7c06749c2
     """
@@ -26,7 +26,7 @@ def imscatter(z:np.array, inputs:np.array, path:str, epoch:int, ax=None, zoom=1)
     plt.savefig('{}/epoch_embedding_{}'.format(_dir,epoch),dpi=98)
     plt.close('all')
 
-def io(n_plots:int,inputs:np.array, reconstructions:np.array,path:str, epoch:int):
+def io(n_plots:int,inputs:np.array, reconstructions:np.array,path:str, epoch:int)->None:
     """
         Plots input and reconstructions
     """
@@ -42,7 +42,7 @@ def io(n_plots:int,inputs:np.array, reconstructions:np.array,path:str, epoch:int
     plt.savefig('{}/epoch_output_{}'.format(_dir,epoch),dpi=98)
     plt.close(fig)
 
-def loss_curve(path:str, **kwargs):
+def loss_curve(path:str, **kwargs)->None:
     plt.title("Train-Validation Accuracy")
     for _name, _loss in kwargs.items():
         plt.plot(_loss, label=_name)

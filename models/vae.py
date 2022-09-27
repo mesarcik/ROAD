@@ -73,7 +73,7 @@ class VAE(nn.Module):
                                       kernel_size= 3, padding= 1),
                             nn.Tanh())
 
-    def encode(self, input: torch.tensor) -> list[torch.tensor]:
+    def encode(self, input: torch.tensor):
         """
         Encodes the input by passing through the encoder network
         and returns the latent codes.
@@ -117,7 +117,7 @@ class VAE(nn.Module):
         eps = torch.randn_like(std)
         return mu#eps * std + mu
 
-    def forward(self, input: torch.tensor, **kwargs) -> list[torch.tensor]:
+    def forward(self, input: torch.tensor, **kwargs):
         mu, log_var = self.encode(input)
         z = self.reparameterize(mu, log_var)
         return  [self.decode(z), input, mu, log_var]
