@@ -47,7 +47,7 @@ def train_vae(train_dataloader:DataLoader, vae:VAE, args:args) -> VAE:
                 loss['loss'].backward()
                 optimizer.step()
 
-                running_loss += loss[''].item()
+                running_loss += loss['loss'].item()
                 tepoch.set_postfix(recon_loss=loss['Reconstruction_Loss'].item(), 
                                    total_loss=loss['loss'].item())
             train_loss.append(running_loss/total_step)

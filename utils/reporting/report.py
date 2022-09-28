@@ -24,7 +24,7 @@ def save_results(args:args,**kwargs):
                     'Latent_Dim':args.latent_dim,
                     'Patch_Size':args.patch_size,
                     'Class':kwargs['anomaly'],
-                    'Neighbour':kargs['neighbour'],
+                    'Neighbour':kwargs['neighbour'],
                     'AUROC':kwargs['auroc'],
                     'AUPRC':kwargs['auprc'],
                     'F1':kwargs['f1_score']},index=[0])],
