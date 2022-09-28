@@ -8,6 +8,7 @@ import _pickle as cPickle
 import torch 
 from torch.utils.data import Dataset, DataLoader
 from matplotlib import pyplot as plt
+from utils import args
 
 def get_data(args):
     with open(args.data_path, 'rb') as f:
@@ -34,20 +35,21 @@ def get_data(args):
                         
 
 class LOFARDataset(Dataset):
-    def __init__(self, data:list, labels:np.array, args, sourceTransform=None):# set default types
-        self.patch_size = args.patch_size
-        self.data = data
-        self.labels = labels
+    def __init__(self, data:list, labels:np.array, args:args, sourceTransform=None):# set default types
+        self.args = args
 
         # TODO: when reshaping we are destroying the frequency band information, 
         #       when this is necessary I need to change the code
-        self.data, self.labels = self.remove_singles(self.data, self.labels)
+        self.data, self.labels = self.remove_singles(data, labels)
         self.data = self.reshape(self.data, (256,256)) 
+
+        _t = self.data.shape
+        self.original_shape = [_t[0], _t[3], _t[2], _t[1]] # change to be [N,C,...]
 
         self.data = self.normalise(self.data)
         self.plot_spectra(self.data, '/tmp/sample')
         self.data = torch.from_numpy(self.data).permute(0,3,1,2)
-        self.data = self.patch(self.data, self.patch_size)
+        self.data = self.patch()
 
         self.sourceTransform = sourceTransform
 
@@ -140,15 +142,13 @@ class LOFARDataset(Dataset):
                 _data[i,...,p] = cv2.resize(d[...,p], dim)
         return _data
             
-    def patch(self, data: torch.tensor, patch_size:int, verbose:bool=False) -> torch.tensor:
+    def patch(self, verbose:bool=False) -> torch.tensor:
         """
             Makes (N,C,h,w) shaped tensor into (N*(h/size)*(w/size),C,h/size, w/size)
             Note: this only works for square patches sizes
             
             Parameters
             ----------
-            data: tensor in form (N,C,h,w)
-            patch_size: square patch size
             verbose: prints tqdm output
 
             Returns
@@ -156,19 +156,23 @@ class LOFARDataset(Dataset):
             patches: tensor of patches reshaped to (N*(h/size)*(w/size),C,h/size, w/size)
 
         """
-        unfold = data.permute(0,2,3,1).unfold(1, patch_size, patch_size).unfold(2, patch_size, patch_size)
-        patches = unfold.contiguous().view(-1, data.shape[1], patch_size, patch_size)
+        unfold = self.data.permute(0,2,3,1).unfold(1, 
+                 self.args.patch_size, 
+                 self.args.patch_size).unfold(2, 
+                        self.args.patch_size, 
+                        self.args.patch_size)
+        patches = unfold.contiguous().view(-1, 
+                self.data.shape[1], 
+                self.args.patch_size, 
+                self.args.patch_size)
         return patches
 
-    def unpatch(self, patches: torch.tensor, patch_size:int, data_shape:tuple, verbose:bool=False) -> torch.tensor:
+    def unpatch(self, verbose:bool=False) -> torch.tensor:
         """
             Used to convert patches dataset into original dimenions
             
             Parameters
             ----------
-            patches: tensor in form (N,C,patch_size, patch_size)
-            patch_size: square patch size
-            data_shape: tuple of original data.shape
             verbose: prints tqdm output
 
             Returns
@@ -176,15 +180,15 @@ class LOFARDataset(Dataset):
             data : tensor of reconstructed patches
 
         """
-        assert len(data_shape) == 4, "Data shape must be in form (N,C,...)"
+        assert len(self.original_shape) == 4, "Data shape must be in form (N,...,C)"
 
-        n_patches = data_shape[-2]//patch_size # only for square patches 
-        N_orig = patches.shape[0]//n_patches**2
-        unfold_shape = (N_orig, n_patches, n_patches, data_shape[1], patch_size, patch_size)
+        n_patches = self.original_shape[-2]//self.args.patch_size # only for square patches 
+        N_orig = self.data.shape[0]//n_patches**2
+        unfold_shape = (N_orig, n_patches, n_patches, self.original_shape[1], self.args.patch_size, self.args.patch_size)
         
-        data = patches.view(unfold_shape)
+        data = self.data.view(unfold_shape)
         data = data.permute(0, 3, 1, 4, 2, 5).contiguous()
-        data = data.view(data_shape)
+        data = data.view(self.original_shape)
 
         return data
 

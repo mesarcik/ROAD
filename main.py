@@ -22,7 +22,7 @@ def main():
 
     test_dataloader = DataLoader(test_dataset, 
             batch_size=args.batch_size, 
-            shuffle=True)
+            shuffle=False)
 
     vae = VAE(in_channels=4, 
             latent_dim=args.latent_dim,
