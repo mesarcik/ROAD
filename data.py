@@ -10,15 +10,29 @@ from torch.utils.data import Dataset, DataLoader
 from matplotlib import pyplot as plt
 from utils import args
 
-def get_data(args):
+def get_data(args, anomaly:str=None):
     with open(args.data_path, 'rb') as f:
         data, labels, source, ids, frequency_band = cPickle.load(f,encoding='latin')
 
     labels = np.array([('-').join(l) for l in labels], dtype='object')
-    train_inds = [i for i,l in enumerate(labels) if '' in l]
-    test_inds = [i for i,l in enumerate(labels) if args.anomaly_class in l]
+
+    train_inds = [i for i,l in enumerate(labels) if l =='']
+    if anomaly is None:
+        test_inds = [i for i,l in enumerate(labels) if args.anomaly_class in l]
+    else:
+        test_inds = [i for i,l in enumerate(labels) if anomaly in l]
+
+
     train_data, train_labels  = [data[i] for i in  train_inds], labels[train_inds]
     test_data, test_labels = [data[i] for i in test_inds], labels[test_inds]
+
+
+    # add equal amounts of training data to the test data
+    _ext = len(test_data)
+    test_data.extend(train_data[-_ext:])
+    test_labels = np.append(test_labels, train_labels[-_ext:])
+    train_data = train_data[:-_ext]
+    train_labels = train_labels[:-_ext]
 
     if args.limit != 'None':
         mask = np.random.randint(low=0, high= len(train_data), size=int(args.limit)) 

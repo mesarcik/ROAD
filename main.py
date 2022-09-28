@@ -11,6 +11,7 @@ import os
 from data import get_data 
 from models import VAE
 from train import train_vae
+from eval import eval_vae
 
 
 def main():
@@ -30,6 +31,7 @@ def main():
             hidden_dims=args.hidden_dims)
 
     vae = train_vae(train_dataloader, vae, args)
+    eval_vae(vae, train_dataloader, args)
 
 if __name__ == '__main__':
     main()

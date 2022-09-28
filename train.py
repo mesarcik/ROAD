@@ -2,13 +2,14 @@ import torch
 from torch.utils.data import DataLoader
 from models import VAE
 from sklearn.manifold import TSNE
+from tqdm import tqdm
 import os 
 
 from utils.args import args
 from utils.vis import imscatter, io, loss_curve
 
 
-def train_vae(train_dataloader:DataLoader, vae:VAE, args:args):
+def train_vae(train_dataloader:DataLoader, vae:VAE, args:args) -> VAE:
     """
         Trains VAE 
         
@@ -33,34 +34,39 @@ def train_vae(train_dataloader:DataLoader, vae:VAE, args:args):
     total_step = len(train_dataloader)
 
     for epoch in range(1, args.epochs+1):
-        running_loss = 0.0
-        for batch_idx, (data_, target_) in enumerate(train_dataloader):
-            data_ = data_.float().to(args.device)
-            optimizer.zero_grad()
+        with tqdm(train_dataloader, unit="batch") as tepoch:
+            running_loss = 0.0
+            for _data, _target in tepoch:
+                tepoch.set_description(f"Epoch {epoch}")
+                _data = _data.float().to(args.device)
+                optimizer.zero_grad()
 
-            [_decoded, _input, _mu, _log_var] = vae(data_)
-            z = vae.reparameterize(_mu, _log_var)
-            loss = vae.loss_function(_decoded, _input, _mu, _log_var)
-            loss['loss'].backward()
-            optimizer.step()
+                [_decoded, _input, _mu, _log_var] = vae(_data)
+                z = vae.reparameterize(_mu, _log_var)
+                loss = vae.loss_function(_decoded, _input, _mu, _log_var)
+                loss['loss'].backward()
+                optimizer.step()
 
-            running_loss += loss['Reconstruction_Loss'].item()
+                running_loss += loss[''].item()
+                tepoch.set_postfix(recon_loss=loss['Reconstruction_Loss'].item(), 
+                                   total_loss=loss['loss'].item())
+            train_loss.append(running_loss/total_step)
+            batch_loss = 0
 
-        print ('Epoch [{}/{}], Loss: {:.4f}'.format(epoch, args.epochs, loss['Reconstruction_Loss'].item()))
-        train_loss.append(running_loss/total_step)
-        batch_loss = 0
-
-        if True: #TODO: check for model improvement
-            torch.save(vae.state_dict(), '{}/vae.pt'.format(model_path))
-            vae.eval()
-            mu, log_var = vae.encode(data_)
-            Z = vae.reparameterize(mu, log_var).cpu().detach().numpy()
-            z = TSNE(n_components=2, learning_rate='auto',init='random', perplexity=3).fit_transform(Z)
-            
-            _inputs= data_.cpu().detach().numpy()
-            _reconstructions = _decoded.cpu().detach().numpy()
-            io(10, _inputs, _reconstructions, model_path, epoch)
-            imscatter(z, _inputs,model_path, epoch)
-        loss_curve(model_path, total_loss=train_loss)
-        vae.train()
-        
+            if epoch %10 ==0: #TODO: check for model improvement
+                torch.save(vae.state_dict(), '{}/vae.pt'.format(model_path))
+                vae.eval()
+                mu, log_var = vae.encode(_data)
+                Z = vae.reparameterize(mu, log_var).cpu().detach().numpy()
+                z = TSNE(n_components=2, 
+                        learning_rate='auto',
+                        init='random', 
+                        perplexity=3).fit_transform(Z)
+                
+                _inputs= _data.cpu().detach().numpy()
+                _reconstructions = _decoded.cpu().detach().numpy()
+                io(10, _inputs, _reconstructions, model_path, epoch)
+                imscatter(z, _inputs,model_path, epoch)
+            loss_curve(model_path, total_loss=train_loss)
+            vae.train()
+    return vae 

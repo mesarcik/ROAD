@@ -50,4 +50,5 @@ def loss_curve(path:str, **kwargs)->None:
     plt.legend()
     plt.xlabel('num_epochs', fontsize=12)
     plt.ylabel('loss', fontsize=12)
-    plt.savefig('{}/loss'.format(path),dpi=98)
+    plt.savefig('{}/loss'.format(path),dpi=99)
+    plt.close('all')
