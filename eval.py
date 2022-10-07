@@ -42,13 +42,13 @@ def nln(z_test:np.array,
 
     return x_hat[I], D, I
 
-def integrate_dists(D:np.array, test_dims: tuple, args:args)->np.array:
+def integrate(error:np.array, test_dims: tuple, args:args)->np.array:
     """
-        Reassembles the distance vectors to the same resolution as the input
+        Reassembles the error vectors to the same resolution as the input
 
         Parameters
         ----------
-        D: KNN distances
+        error: error metric
         test_dims: dimensions of test data
         args: utils.args
 
@@ -57,7 +57,7 @@ def integrate_dists(D:np.array, test_dims: tuple, args:args)->np.array:
         dists: re-assembled distances
 
     """
-    dists = np.mean(D, axis = tuple(range(1,D.ndim)))
+    dists = np.mean(error, axis = tuple(range(1,error.ndim)))
     n_patches = int(256//args.patch_size)
     dists = dists.reshape(test_dims[0], 
             n_patches,
@@ -94,25 +94,41 @@ def compute_metrics(labels:np.array, anomaly:str, pred:np.array)->(float, float,
     f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
     f1_score = np.max(f1_scores)
 
-    return (auroc,aurpc,f1_score)
+    return (auroc,auprc,f1_score)
 
-def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args)->None:
+def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")->None:
+    """
+        Computes AUROC, AUPRC and F1 for VAE for multiple calculation types 
+        and writes them to file
+
+        Parameters
+        ----------
+        vae: trained VAE on the cpu
+        train_dataloader: Dataloader for the training data
+        args: args
+        error: calculation method used for VAE ~ ('nln','recon')
+
+        Returns
+        -------
+        None
+    """
     vae.to(args.device)
     vae.eval()
     
     z_train = []
-    x_hat = []
+    x_hat_train = []
     for data_, target_ in train_dataloader:
         data_ = data_.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(data_)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
-        x_hat.append(_decoded.cpu().detach().numpy())
+        x_hat_train.append(_decoded.cpu().detach().numpy())
 
     z_train = np.vstack(z_train) 
-    x_hat = np.vstack(x_hat)
+    x_hat_train = np.vstack(x_hat_train)
 
     for anomaly in ['oscillating_tile', 'electric_fence','data_loss', 'lightning','strong_radio_emitter']:
         z_test= []
+        x_hat_test = []
         _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
                 batch_size=args.batch_size, 
@@ -122,18 +138,36 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args)->None:
             data_ = data_.float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(data_)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
+            x_hat_test.append(_decoded.cpu().detach().numpy())
         z_test = np.vstack(z_test)
+        x_hat_test = np.vstack(x_hat_test)
 
-        for N in args.neighbours:
-            # build a flat (CPU) index
-            neighbours, D, I = nln(z_test, z_train, x_hat, N, args)
-            dists = integrate_dists(D, test_dataloader.dataset.original_shape, args)
+        if error == 'nln':
+            for N in args.neighbours:
+                # build a flat (CPU) index
+                neighbours, D, I = nln(z_test, z_train, x_hat_train, N, args)
+                dists = integrate(D, test_dataloader.dataset.original_shape, args)
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+                                                    anomaly, 
+                                                    dists)
 
+                print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1))
+
+                save_results(args, 
+                        anomaly=anomaly,
+                        neighbour=N,
+                        auroc=auroc, 
+                        auprc=auprc, 
+                        f1_score=f1_score)
+
+        elif error == 'recon':
+            error = (x_hat_test - test_dataloader.dataset.data.numpy())**2
+            error = integrate(error, test_dataloader.dataset.original_shape, args)
             auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
                                                 anomaly, 
-                                                dists)
+                                                error)
 
-            print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1_score))
+            print("AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(auroc, auprc, f1))
 
             save_results(args, 
                     anomaly=anomaly,

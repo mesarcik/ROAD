@@ -31,7 +31,7 @@ def main():
             hidden_dims=args.hidden_dims)
 
     vae = train_vae(train_dataloader, vae, args)
-    eval_vae(vae, train_dataloader, args)
+    eval_vae(vae, train_dataloader, args, error='recon')
 
 if __name__ == '__main__':
     main()
