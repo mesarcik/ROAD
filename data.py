@@ -82,6 +82,7 @@ class LOFARDataset(Dataset):
 
         return datum, label
 
+
     def normalise(self, data:np.array)->np.array:
         """
             perpendicular polarisation normalisation
@@ -180,30 +181,4 @@ class LOFARDataset(Dataset):
                 self.args.patch_size, 
                 self.args.patch_size)
         return patches
-
-    def unpatch(self, verbose:bool=False) -> torch.tensor:
-        """
-            Used to convert patches dataset into original dimenions
-            
-            Parameters
-            ----------
-            verbose: prints tqdm output
-
-            Returns
-            -------
-            data : tensor of reconstructed patches
-
-        """
-        assert len(self.original_shape) == 4, "Data shape must be in form (N,...,C)"
-
-        n_patches = self.original_shape[-2]//self.args.patch_size # only for square patches 
-        N_orig = self.data.shape[0]//n_patches**2
-        unfold_shape = (N_orig, n_patches, n_patches, self.original_shape[1], self.args.patch_size, self.args.patch_size)
-        
-        data = self.data.view(unfold_shape)
-        data = data.permute(0, 3, 1, 4, 2, 5).contiguous()
-        data = data.view(self.original_shape)
-
-        return data
-
 
