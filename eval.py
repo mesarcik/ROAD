@@ -10,9 +10,9 @@ from data import get_data
 
 def nln(z_test:np.array, 
         z_train:np.array, 
-        x_hat:np.array,
         N:int, 
-        args:args)->(np.array, 
+        args:args,
+        x_hat:np.array=None)->(np.array, 
                      np.array, 
                      np.array):
     """
@@ -22,25 +22,28 @@ def nln(z_test:np.array,
         ----------
         z_test: the vae projection of the test data
         z_train: the vae projection of the train data
-        x_hat: the vae reconstruction of training data
+        x_hat: the vae reconstruction of training data (optional)
         args: utils.args
         N: number of neigbours
         verbose: prints tqdm output
 
         Returns
         -------
-        recon_neighbours: reconstructed neighbours
+        recon_neighbours: reconstructed neighbours if x_hat supplied
         dists: distance to neighbours 
         indx: indices of z_train that correspond to the neighbours 
     """
-
-    res = faiss.StandardGpuResources()
-    index_flat = faiss.IndexFlatL2(args.latent_dim)
-    gpu_index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
-    gpu_index_flat.add(z_train)         # add vectors to the index
-    D, I = gpu_index_flat.search(z_test, N)  # actual search
-
-    return x_hat[I], D, I
+    #TODO: fix faiss gpu installation
+    #res = faiss.StandardGpuResources()
+    index_flat = faiss.IndexFlatL2(z_train.shape[-1])
+    #gpu_index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
+    index_flat.add(z_train.astype('float32'))         # add vectors to the index
+    D, I = index_flat.search(z_test.astype('float32'), N)  # actual search
+    
+    if x_hat != None:
+        return x_hat[I], D, I
+    else:
+        return D, I
 
 def integrate(error:np.array, test_dims: tuple, args:args)->np.array:
     """
@@ -117,9 +120,9 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     
     z_train = []
     x_hat_train = []
-    for data_, target_ in train_dataloader:
-        data_ = data_.float().to(args.device)
-        [_decoded, _input, _mu, _log_var] = vae(data_)
+    for _data, _target in train_dataloader:
+        _data = _data.float().to(args.device)
+        [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
         x_hat_train.append(_decoded.cpu().detach().numpy())
 
@@ -134,9 +137,9 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for data_, target_ in test_dataloader:
-            data_ = data_.float().to(args.device)
-            [_decoded, _input, _mu, _log_var] = vae(data_)
+        for _data, _target in test_dataloader:
+            _data = _data.float().to(args.device)
+            [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
             x_hat_test.append(_decoded.cpu().detach().numpy())
         z_test = np.vstack(z_test)
@@ -145,7 +148,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
         if error == 'nln':
             for N in args.neighbours:
                 # build a flat (CPU) index
-                neighbours, D, I = nln(z_test, z_train, x_hat_train, N, args)
+                neighbours, D, I = nln(z_test, z_train, N, args, x_hat=x_hat_train)
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
                 auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
                                                     anomaly, 
@@ -171,8 +174,70 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
 
             save_results(args, 
                     anomaly=anomaly,
-                    neighbour=N,
+                    neighbour=None,
                     auroc=auroc, 
                     auprc=auprc, 
-                    f1_score=f1_score)
+                    f1_score=f1)
 
+def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln")->None:
+    """
+        Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types 
+        and writes them to file
+
+        Parameters
+        ----------
+        resnet : trained Resnet on the cpu
+        train_dataloader: Dataloader for the training data
+        args: args
+        error: calculation method used for Resnet ~ ('nln')
+
+        Returns
+        -------
+        None
+    """
+    resnet.to(args.device)
+    resnet.eval()
+    
+    z_train = []
+    for _data, _target,_freq in train_dataloader:
+        _data = _data.float().to(args.device)
+        z = resnet(_data)
+        z_train.append(z.cpu().detach().numpy())
+
+    z_train = np.vstack(z_train) 
+
+    for anomaly in ['oscillating_tile', 'electric_fence','data_loss', 'lightning','strong_radio_emitter']:
+        z_test= []
+        _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
+        test_dataloader = DataLoader(test_dataset, 
+                batch_size=args.batch_size, 
+                shuffle=False)
+
+        for _data, _target, _freq in test_dataloader:
+            _data = _data.float().to(args.device)
+            z = resnet(_data)
+            z_test.append(z.cpu().detach().numpy())
+        z_test = np.vstack(z_test)
+
+        if error == 'nln':
+            for N in args.neighbours:
+                # build a flat (CPU) index
+                D, I = nln(z_test, z_train, N, args)
+                dists = integrate(D, test_dataloader.dataset.original_shape, args)
+                print('__'*100)
+                print(test_dataloader.dataset.original_shape)
+                print(dists.shape)
+                print(len(test_dataloader.dataset.labels))
+                print('__'*100)
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+                                                    anomaly, 
+                                                    dists)
+
+                print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1))
+
+                save_results(args, 
+                        anomaly=anomaly,
+                        neighbour=N,
+                        auroc=auroc, 
+                        auprc=auprc, 
+                        f1_score=f1)
