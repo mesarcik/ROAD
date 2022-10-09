@@ -224,11 +224,6 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
                 # build a flat (CPU) index
                 D, I = nln(z_test, z_train, N, args)
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
-                print('__'*100)
-                print(test_dataloader.dataset.original_shape)
-                print(dists.shape)
-                print(len(test_dataloader.dataset.labels))
-                print('__'*100)
                 auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
                                                     anomaly, 
                                                     dists)

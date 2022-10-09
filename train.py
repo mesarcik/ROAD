@@ -111,7 +111,7 @@ def train_resnet(train_dataloader:DataLoader, resnet, args:args) :
                 optimizer.step()
 
                 running_loss += loss.item()
-                tepoch.set_postfix(recon_loss=loss.item())
+                tepoch.set_postfix(loss=loss.item())
 
             train_loss.append(running_loss/total_step)
             batch_loss = 0
