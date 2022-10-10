@@ -33,7 +33,7 @@ def main():
         #TODO Add eval/train state 
         #vae.load_state_dict(torch.load('outputs/VAE/lightning/premium-amiable-caterpillar-from-pluto/vae.pt'))
 
-        eval_vae(vae, train_dataloader, args, error='recon')
+        eval_vae(vae, train_dataloader, args, error='nln')
     elif args.model =='resnet':
         resnet = Resnet(dim=2,in_channels=4)
         resnet = train_resnet(train_dataloader, resnet, args)

@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.metrics import roc_curve,precision_recall_curve, auc
 from utils.reporting import save_results
 from data import get_data
+import pkg_resources
 
 def nln(z_test:np.array, 
         z_train:np.array, 
@@ -34,16 +35,27 @@ def nln(z_test:np.array,
         indx: indices of z_train that correspond to the neighbours 
     """
     #TODO: fix faiss gpu installation
-    #res = faiss.StandardGpuResources()
-    index_flat = faiss.IndexFlatL2(z_train.shape[-1])
-    #gpu_index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
-    index_flat.add(z_train.astype('float32'))         # add vectors to the index
-    D, I = index_flat.search(z_test.astype('float32'), N)  # actual search
-    
-    if x_hat != None:
-        return x_hat[I], D, I
-    else:
-        return D, I
+    gpu = False
+
+    try:
+        _installed = pkg_resources.get_distribution('faiss-gpu')
+        gpu=True
+    except Exception as e:
+        pass
+    finally:
+        index_flat = faiss.IndexFlatL2(z_train.shape[-1])
+
+        if gpu:
+            res = faiss.StandardGpuResources()
+            index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
+        
+        index_flat.add(z_train.astype('float32'))         # add vectors to the index
+        D, I = index_flat.search(z_test.astype('float32'), N)  # actual search
+        
+        if x_hat is not None:
+            return x_hat[I], D, I
+        else:
+            return D, I
 
 def integrate(error:np.array, test_dims: tuple, args:args)->np.array:
     """
@@ -120,7 +132,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     
     z_train = []
     x_hat_train = []
-    for _data, _target in train_dataloader:
+    for _data, _target, _freq in train_dataloader:
         _data = _data.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
