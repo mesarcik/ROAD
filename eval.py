@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.metrics import roc_curve,precision_recall_curve, auc
 from utils.reporting import save_results
 from data import get_data
+from utils.data import anomalies 
 import pkg_resources
 
 def nln(z_test:np.array, 
@@ -141,7 +142,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     z_train = np.vstack(z_train) 
     x_hat_train = np.vstack(x_hat_train)
 
-    for anomaly in ['oscillating_tile', 'electric_fence','data_loss', 'lightning','strong_radio_emitter']:
+    for anomaly in anomalies:
         z_test= []
         x_hat_test = []
         _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
@@ -218,7 +219,7 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
 
     z_train = np.vstack(z_train) 
 
-    for anomaly in ['oscillating_tile', 'electric_fence','data_loss', 'lightning','strong_radio_emitter']:
+    for anomaly in anomalies:
         z_test= []
         _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
