@@ -9,7 +9,7 @@ from utils.args import args
 import os
 
 from data import get_data 
-from models import VAE,Resnet
+from models import VAE, ResNet
 from train import train_vae, train_resnet
 from eval import eval_vae, eval_resnet
 
@@ -35,7 +35,7 @@ def main():
 
         eval_vae(vae, train_dataloader, args, error='nln')
     elif args.model =='resnet':
-        resnet = Resnet(dim=2,in_channels=4)
+        resnet = ResNet(dim=2,in_channels=4)
         resnet = train_resnet(train_dataloader, resnet, args)
         eval_resnet(resnet, train_dataloader, args, error='nln')
 

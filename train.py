@@ -106,7 +106,7 @@ def train_resnet(train_dataloader:DataLoader, resnet, args:args) :
                 optimizer.zero_grad()
 
                 z = resnet(_data)
-                loss = loss_function(z, _freq)
+                loss = resnet.loss_curve(z, _freq)['loss']
                 loss.backward()
                 optimizer.step()
 
@@ -119,7 +119,11 @@ def train_resnet(train_dataloader:DataLoader, resnet, args:args) :
             if epoch %10 ==0: #TODO: check for model improvement
                 torch.save(resnet.state_dict(), '{}/resnet.pt'.format(model_path))
                 resnet.eval()
-                z = resnet(_data).cpu().detach().numpy()
+                Z = resnet.embed(_data).cpu().detach().numpy()
+                z = TSNE(n_components=2, 
+                        learning_rate='auto',
+                        init='random', 
+                        perplexity=3).fit_transform(Z)
                 
                 _inputs= _data.cpu().detach().numpy()
                 imscatter(z, _inputs,model_path, epoch)

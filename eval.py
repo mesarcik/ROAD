@@ -213,7 +213,7 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
     z_train = []
     for _data, _target,_freq in train_dataloader:
         _data = _data.float().to(args.device)
-        z = resnet(_data)
+        z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
 
     z_train = np.vstack(z_train) 
@@ -227,7 +227,7 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
 
         for _data, _target, _freq in test_dataloader:
             _data = _data.float().to(args.device)
-            z = resnet(_data)
+            z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
         z_test = np.vstack(z_test)
 
