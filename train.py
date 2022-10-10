@@ -36,7 +36,7 @@ def train_vae(train_dataloader:DataLoader, vae:VAE, args:args) -> VAE:
     for epoch in range(1, args.epochs+1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
-            for _data, _target in tepoch:
+            for _data, _target, _freq in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
                 optimizer.zero_grad()
