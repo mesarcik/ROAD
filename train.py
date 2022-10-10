@@ -92,7 +92,6 @@ def train_resnet(train_dataloader:DataLoader, resnet, args:args) :
 
     resnet.to(args.device)
     optimizer = torch.optim.Adam(resnet.parameters(),lr=args.learning_rate)#, lr=0.0001, momentum=0.9)
-    loss_function = torch.nn.BCEWithLogitsLoss()
     train_loss = []
     total_step = len(train_dataloader)
 
@@ -106,7 +105,7 @@ def train_resnet(train_dataloader:DataLoader, resnet, args:args) :
                 optimizer.zero_grad()
 
                 z = resnet(_data)
-                loss = resnet.loss_curve(z, _freq)['loss']
+                loss = resnet.loss_function(z, _freq)['loss']
                 loss.backward()
                 optimizer.step()
 
