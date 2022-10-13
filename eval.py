@@ -35,28 +35,19 @@ def nln(z_test:np.array,
         dists: distance to neighbours 
         indx: indices of z_train that correspond to the neighbours 
     """
-    #TODO: fix faiss gpu installation
-    gpu = False
 
-    try:
-        _installed = pkg_resources.get_distribution('faiss-gpu')
-        gpu=True
-    except Exception as e:
-        pass
-    finally:
-        index_flat = faiss.IndexFlatL2(z_train.shape[-1])
+    index_flat = faiss.IndexFlatL2(z_train.shape[-1])
 
-        if gpu:
-            res = faiss.StandardGpuResources()
-            index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
-        
-        index_flat.add(z_train.astype('float32'))         # add vectors to the index
-        D, I = index_flat.search(z_test.astype('float32'), N)  # actual search
-        
-        if x_hat is not None:
-            return x_hat[I], D, I
-        else:
-            return D, I
+    res = faiss.StandardGpuResources()
+    index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
+    
+    index_flat.add(z_train.astype('float32'))         # add vectors to the index
+    D, I = index_flat.search(z_test.astype('float32'), N)  # actual search
+    
+    if x_hat is not None:
+        return x_hat[I], D, I
+    else:
+        return D, I
 
 def integrate(error:np.array, test_dims: tuple, args:args)->np.array:
     """
