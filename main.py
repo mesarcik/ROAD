@@ -31,9 +31,9 @@ def main():
                 hidden_dims=args.hidden_dims)
         vae = train_vae(train_dataloader, vae, args)
         #TODO Add eval/train state 
-        #vae.load_state_dict(torch.load('outputs/VAE/lightning/premium-amiable-caterpillar-from-pluto/vae.pt'))
-
+        #vae.load_state_dict(torch.load('outputs/vae/lightning/vague-hospitable-impala-of-modernism/vae.pt'))
         eval_vae(vae, train_dataloader, args, error='nln')
+
     elif args.model =='resnet':
         resnet = ResNet(dim=2,in_channels=4)
         resnet = train_resnet(train_dataloader, resnet, args)

@@ -152,7 +152,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
         if error == 'nln':
             for N in args.neighbours:
                 # build a flat (CPU) index
-                neighbours, D, I = nln(z_test, z_train, N, args, x_hat=x_hat_train)
+                D, I = nln(z_test, z_train, N, args)
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
                 auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
                                                     anomaly, 

@@ -18,9 +18,9 @@ def get_data(args, anomaly:str=None):
 
     train_inds = [i for i,l in enumerate(labels) if l =='']
     if anomaly is None:
-        test_inds = [i for i,l in enumerate(labels) if args.anomaly_class in l]
-    else:
-        test_inds = [i for i,l in enumerate(labels) if anomaly in l]
+        test_inds = [i for i,l in enumerate(labels) if args.anomaly_class == l ]
+    else:                                                                         
+        test_inds = [i for i,l in enumerate(labels) if anomaly == l ]              
 
 
     train_data  = [data[i] for i in  train_inds]
