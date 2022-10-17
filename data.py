@@ -51,20 +51,35 @@ def get_data(args, anomaly:str=None):
     train_dataset = LOFARDataset(train_data,
             train_labels,
             train_frequency,
+            source,
             args)
 
     test_dataset = LOFARDataset(test_data,
             test_labels,
             test_frequency,
+            source,
             args)
     return train_dataset, test_dataset
                         
 
 class LOFARDataset(Dataset):
-    def __init__(self, data:list, labels:list, frequency_band:list, args:args, sourceTransform=None):# set default types
-        self.args = args
+    def __init__(self, 
+            data:list, 
+            labels:list, 
+            frequency_band:list, 
+            source:list, 
+            args:args, 
+            sourceTransform=None):# set default types
 
-        self.data, self.labels, self.frequency_band = self.remove_singles(data, labels, frequency_band)
+        self.args = args
+        self.data, self.labels, self.frequency_band, source = self.remove_singles(data, 
+                                                                                  labels, 
+                                                                                  frequency_band, 
+                                                                                  source)
+
+        self.stations = self.extract_stations(source)
+        # number of patches per input
+        self.stations = torch.from_numpy(np.repeat(self.stations, int(256/args.patch_size)**2))
 
         self.data, self.frequency_band = self.reshape((256,256)) 
 
@@ -78,7 +93,9 @@ class LOFARDataset(Dataset):
 
         self.frequency_band = torch.from_numpy(self.frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-        self.frequency_band = (self.frequency_band- torch.min(self.frequency_band)) / (torch.max(self.frequency_band) - torch.min(self.frequency_band))
+        self.frequency_band = ((self.frequency_band- torch.min(self.frequency_band)) / 
+                                (torch.max(self.frequency_band) - torch.min(self.frequency_band)))
+
 
         self.sourceTransform = sourceTransform
 
@@ -92,12 +109,33 @@ class LOFARDataset(Dataset):
         datum = self.data[idx,...]
         label = ''#str('-'.join(self.labels[idx]))
         frequency = self.frequency_band[idx,...]
+        station = self.stations[idx]
 
         if self.sourceTransform:
             datum = self.sourceTransform(datum)
 
-        return datum, label, frequency
+        return datum, label, frequency, station
 
+
+    def extract_stations(self, sources:list)->np.array:
+        """
+            Extracts stations from source feild of dataset
+            
+            Parameters
+            ----------
+            sources: list of sources for each baseline
+
+            Returns
+            -------
+            encoded_stations: station names encoded between 0-1
+
+        """
+        stations = np.array([s.split('_')[2] for s in sources])
+        _u = np.unique(stations)
+        mapping  = np.linspace(0, 1, len(_u))
+        indexes = np.array([np.where(_u == s)[0][0] for s in stations]) 
+        encoded_stations = mapping[indexes]
+        return encoded_stations
 
     def normalise(self, data:np.array)->np.array:
         """
@@ -203,4 +241,3 @@ class LOFARDataset(Dataset):
                 self.args.patch_size, 
                 self.args.patch_size)
         return patches
-

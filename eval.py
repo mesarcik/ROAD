@@ -124,7 +124,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     
     z_train = []
     x_hat_train = []
-    for _data, _target, _freq in train_dataloader:
+    for _data, _target, _freq, _station in train_dataloader:
         _data = _data.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -141,7 +141,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq in test_dataloader:
+        for _data, _target, _freq, _station in test_dataloader:
             _data = _data.float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -203,7 +203,7 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
     resnet.eval()
     
     z_train = []
-    for _data, _target,_freq in train_dataloader:
+    for _data, _target, _freq, _station in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -217,7 +217,7 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq in test_dataloader:
+        for _data, _target, _freq, _station in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())

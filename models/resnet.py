@@ -10,12 +10,14 @@ class ResNet(nn.Module):
         self.dim = dim
 
         self.resnet = models.resnet18(pretrained=False)
-        self.resnet.fc = nn.Linear(512, self.dim)
+
         self.resnet.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                  kernel_size=(7, 7), 
                                  stride=(2, 2), 
                                  padding=(3, 3), 
                                  bias=False)
+
+        self.resnet.fc = nn.Linear(512, self.dim)
 
         self.loss_fn = nn.BCEWithLogitsLoss()
 

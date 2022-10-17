@@ -36,7 +36,7 @@ def train_vae(train_dataloader:DataLoader, vae:VAE, args:args) -> VAE:
     for epoch in range(1, args.epochs+1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
-            for _data, _target, _freq in tepoch:
+            for _data, _target, _freq, _station in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
                 optimizer.zero_grad()
@@ -98,14 +98,14 @@ def train_resnet(train_dataloader:DataLoader, resnet, args:args) :
     for epoch in range(1, args.epochs+1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
-            for _data, _target, _freq in tepoch:
+            for _data, _target, _freq, _station in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
-                _freq= _freq.float().to(args.device)
+                _out = torch.cat((_freq, _station.reshape(-1,1)), dim=1).float().to(args.device)
                 optimizer.zero_grad()
 
                 z = resnet(_data)
-                loss = resnet.loss_function(z, _freq)['loss']
+                loss = resnet.loss_function(z, _out)['loss']
                 loss.backward()
                 optimizer.step()
 
