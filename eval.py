@@ -1,14 +1,15 @@
 import torch
 import faiss
-from torch.utils.data import DataLoader
-from models import VAE
-from utils import args
 import numpy as np
-from sklearn.metrics import roc_curve,precision_recall_curve, auc
+from torch.utils.data import DataLoader
+from models import VAE, ResNet
+from utils import args
+from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
+from utils.vis import io
 from data import get_data
 from utils.data import anomalies 
-import pkg_resources
+from utils.data.patches import reconstruct, reconstruct_distances
 
 def nln(z_test:np.array, 
         z_train:np.array, 
@@ -183,7 +184,11 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                     auprc=auprc, 
                     f1_score=f1)
 
-def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln")->None:
+def eval_resnet(resnet:ResNet, 
+                train_dataloader: DataLoader, 
+                args:args, 
+                plot:bool=True,
+                error:str="nln")->None:
     """
         Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types 
         and writes them to file
@@ -211,7 +216,7 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
     z_train = np.vstack(z_train) 
 
     for anomaly in anomalies:
-        z_test= []
+        z_test, x_test = [], []
         _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
                 batch_size=args.batch_size, 
@@ -221,13 +226,33 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
-        z_test = np.vstack(z_test)
+            x_test.append(_data.cpu().detach().numpy())
+        z_test, x_test = np.vstack(z_test), np.vstack(x_test)
+
+        if plot:
+            x_recon = reconstruct(x_test, args)
 
         if error == 'nln':
             for N in args.neighbours:
                 # build a flat (CPU) index
                 D, I = nln(z_test, z_train, N, args)
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
+
+                if plot:
+                    _min, _max = np.percentile(D, [1,99])
+                    D= np.clip(D,_min, _max)
+                    recon_dists = reconstruct_distances(D, args)
+                    recon_dists = ((recon_dists- recon_dists.min()) / 
+                                            (recon_dists.max() - recon_dists.min()))
+
+                    io(5, 
+                        x_recon, 
+                        recon_dists,
+                        'outputs/{}/{}/{}/{}'.format(args.model, args.anomaly_class, args.model_name, 'reconstructions'),
+                        -1, 
+                        N,
+                        anomaly) 
+
                 auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
                                                     anomaly, 
                                                     dists)

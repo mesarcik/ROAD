@@ -101,7 +101,7 @@ def train_resnet(train_dataloader:DataLoader, resnet, args:args) :
             for _data, _target, _freq, _station in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
-                _out = torch.cat((_freq, _station.reshape(-1,1)), dim=1).float().to(args.device)
+                _out = _station.float().to(args.device)
                 optimizer.zero_grad()
 
                 z = resnet(_data)

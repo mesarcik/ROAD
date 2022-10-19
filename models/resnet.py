@@ -24,7 +24,7 @@ class ResNet(nn.Module):
     def forward(self, input: torch.tensor, **kwargs):
         return self.resnet(input)
 
-    def embed(self, input:torch.tensor):
+    def embed(self, input:torch.tensor) -> torch.tensor:
         modules=list(self.resnet.children())[:-1]
         model=nn.Sequential(*modules)
         return model(input)[...,0,0] # remove the last two 1,1 dims

@@ -21,6 +21,7 @@ parser.add_argument('-patch_size', metavar='-ps', type=int, default=32, help = '
 parser.add_argument('-batch_size', metavar='-bs', type=int, default=2**11, help = 'Batch size')
 parser.add_argument('-learning_rate', metavar='-lr', type=float, default=1e-3, help = 'Learning rate')
 parser.add_argument('-hidden_dims', metavar='-hd', nargs='+',type=int, default=[32,64,128,256], help = 'Hidden dims for VAE')
+parser.add_argument('-percentage_anomalies', metavar='-pa', type=float, default=0.1, help = 'Percentage of anomalies')
 
 args = parser.parse_args()
 
