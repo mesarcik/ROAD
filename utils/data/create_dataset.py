@@ -91,44 +91,45 @@ def create_dataset()->None:
 
     data, frequency_band = reshape(data, frequency_band, SIZE) 
 
-    # randomly shuffle 
-    c = list(zip(data, labels, source, ids, frequency_band))
-    random.shuffle(c)
-    data, labels, source, ids, frequency_band= zip(*c)
-
-    # do some sanitation and remove poorly labelled classes remove unknown classes, scintillation, high_noise_elements
     labels = [('-').join(l) for l in labels]
-    labels = [l for l in labels if (('unknown' not in l) and 
-                                    ('scintillation' not in l) and
-                                    ('high_noise_elements' not in l))]
 
     # separate test_data and train_data
     # train_data has label of ''
 
     train_inds = [i for i,l in enumerate(labels) if l =='']
-    reserved_indxs = 1200
 
-    train_data = np.array([data[i] for i in  train_inds][:-reserved_indxs],dtype='float32')
-    train_labels = np.array([labels[i] for i in train_inds][:-reserved_indxs],dtype='S100')
-    train_source = np.array([source[i] for i in train_inds][:-reserved_indxs],dtype='S100')
-    train_ids = np.array([ids[i] for i in train_inds][:-reserved_indxs],dtype='S100')
-    train_frequency = np.array([frequency_band[i] for i in train_inds][:-reserved_indxs], dtype='float32')
+    train_data = np.array([data[i] for i in  train_inds],dtype='float32')
+    train_labels = np.array([labels[i] for i in train_inds],dtype='S100')
+    train_source = np.array([source[i] for i in train_inds],dtype='S100')
+    train_ids = np.array([ids[i] for i in train_inds],dtype='S100')
+    train_frequency = np.array([frequency_band[i] for i in train_inds], dtype='float32')
 
-    train_group.create_dataset('data',data=train_data, compression='gzip', compression_opts=2)
-    train_group.create_dataset('labels',data=train_labels, compression='gzip', compression_opts=2)
-    train_group.create_dataset('source',data=train_source, compression='gzip', compression_opts=2)
-    train_group.create_dataset('ids',data=train_ids, compression='gzip', compression_opts=2)
-    train_group.create_dataset('frequency_band',data=train_frequency, compression='gzip', compression_opts=2)
+    # Randomly sample non-anomalous data for train/test split
+    reserved_samples = 1200
+    mask = np.zeros(len(train_inds))
+    mask[:reserved_samples] = 1
+    np.random.shuffle(mask)
+    train_mask,test_mask = mask==0, mask==1
 
-    test_group.create_dataset('data',data=np.array(train_data[-reserved_indxs:], dtype='float32'), compression='gzip', compression_opts=2)
-    test_group.create_dataset('labels',data=np.array(train_labels[-reserved_indxs:],dtype='S100'), compression='gzip', compression_opts=2)
-    test_group.create_dataset('source',data=np.array(train_source[-reserved_indxs:],dtype='S100'), compression='gzip', compression_opts=2)
-    test_group.create_dataset('ids',data=np.array(train_ids[-reserved_indxs:],dtype='S100'), compression='gzip', compression_opts=2)
-    test_group.create_dataset('frequency_band',data=np.array(train_frequency[-reserved_indxs:],dtype='float32'), compression='gzip', compression_opts=2)
+    train_group.create_dataset('data',data=train_data[train_mask], compression='gzip', compression_opts=2)
+    train_group.create_dataset('labels',data=train_labels[train_mask], compression='gzip', compression_opts=2)
+    train_group.create_dataset('source',data=train_source[train_mask], compression='gzip', compression_opts=2)
+    train_group.create_dataset('ids',data=train_ids[train_mask], compression='gzip', compression_opts=2)
+    train_group.create_dataset('frequency_band',data=train_frequency[train_mask], compression='gzip', compression_opts=2)
 
+    test_group.create_dataset('data',data=np.array(train_data[test_mask], dtype='float32'), compression='gzip', compression_opts=2)
+    test_group.create_dataset('labels',data=np.array(train_labels[test_mask],dtype='S100'), compression='gzip', compression_opts=2)
+    test_group.create_dataset('source',data=np.array(train_source[test_mask],dtype='S100'), compression='gzip', compression_opts=2)
+    test_group.create_dataset('ids',data=np.array(train_ids[test_mask],dtype='S100'), compression='gzip', compression_opts=2)
+    test_group.create_dataset('frequency_band',data=np.array(train_frequency[test_mask],dtype='float32'), compression='gzip', compression_opts=2)
+    
     for anomaly in tqdm(anomalies):
         anomaly_group = anomalies_group.create_group(anomaly)
-        test_inds = [i for i,l in enumerate(labels) if anomaly in l]              
+        # do some sanitation and remove poorly labelled classes remove unknown classes, scintillation, high_noise_elements
+        test_inds = [i for i,l in enumerate(labels) if ((anomaly in l) and 
+                                                        ('unknown' not in l) and 
+                                                        ('scintillation' not in l) and 
+                                                        ('high_noise_elements' not in l))]              
         print(anomaly, len(test_inds))
 
         test_data = np.array([data[i] for i in  test_inds],dtype='float32')
