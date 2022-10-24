@@ -42,10 +42,10 @@ def io(n_plots:int,inputs:np.array, reconstructions:np.array,path:str, epoch:int
     plt.savefig('{}/{}_epoch_output_{}_{}'.format(_dir, anomaly, epoch, neighbours),dpi=98)
     plt.close(fig)
 
-def loss_curve(path:str, **kwargs)->None:
+def loss_curve(path:str,epoch:int, **kwargs)->None:
     plt.title("Train-Validation Accuracy")
     for _name, _loss in kwargs.items():
-        plt.plot(_loss, label=_name)
+        plt.plot(np.arange(epoch),_loss, label=_name)
 
     plt.legend()
     plt.xlabel('num_epochs', fontsize=12)

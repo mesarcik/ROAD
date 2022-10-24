@@ -4,8 +4,8 @@ from tqdm import tqdm
 import torch 
 from torch.utils.data import Dataset, DataLoader
 from matplotlib import pyplot as plt
-from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder,OneHotEncoder
 import h5py 
 
 from utils import args
@@ -22,11 +22,27 @@ def get_data(args, anomaly:str=None):
     #    train_labels = [train_labels[m] for m in mask]
     #    train_frequency = [train_frequency[m] for m in mask] 
 
-    train_dataset = LOFARDataset(hf['train_data/data'][:],
-            hf['train_data/labels'][:].astype(str),
-            hf['train_data/frequency_band'][:],
-            hf['train_data/source'][:].astype(str),
-            args)
+    (train_data, val_data, 
+    train_labels, val_labels, 
+    train_frequency_band, val_frequency_band,
+    train_source, val_source) = train_test_split(hf['train_data/data'][:], 
+                                                 hf['train_data/labels'][:].astype(str), 
+                                                 hf['train_data/frequency_band'][:], 
+                                                 hf['train_data/source'][:].astype(str), 
+                                                 test_size=0.05, 
+                                                 random_state=args.seed)
+
+    train_dataset = LOFARDataset(train_data, 
+                                 train_labels, 
+                                 train_frequency_band, 
+                                 train_source,
+                                 args)
+
+    val_dataset =   LOFARDataset(val_data, 
+                                 val_labels, 
+                                 val_frequency_band, 
+                                 val_source,
+                                 args)
 
     if anomaly is None: anomaly = args.anomaly_class
     test_dataset = LOFARDataset(_join(hf, anomaly, 'data'),
@@ -35,7 +51,7 @@ def get_data(args, anomaly:str=None):
                                 _join(hf, anomaly, 'source').astype(str),
                                 args)
 
-    return train_dataset, test_dataset
+    return train_dataset, val_dataset, test_dataset
                         
 def _join(hf:h5py.File, anomaly:str, field:str)->np.array:
     """
@@ -81,8 +97,9 @@ class LOFARDataset(Dataset):
 
         self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-        self.frequency_band = ((self.frequency_band- torch.min(self.frequency_band)) / 
-                                (torch.max(self.frequency_band) - torch.min(self.frequency_band)))
+        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
+        #self.frequency_band = ((self.frequency_band- torch.min(self.frequency_band)) / 
+        #                        (torch.max(self.frequency_band) - torch.min(self.frequency_band)))
 
 
         self.sourceTransform = sourceTransform
@@ -104,6 +121,26 @@ class LOFARDataset(Dataset):
 
         return datum, label, frequency, station
 
+    def encode_frequencies(self, frequency_band:np.array)->np.array:
+        """
+            Extracts stations from source feild of dataset and encodes 
+            
+            Parameters
+            ----------
+            sources:  np.array of sources for each baseline
+
+            Returns
+            -------
+            encoded_stations: station names encoded between 0-1
+
+        """
+        encoded_frequencies = []
+
+        for f in frequency_band:
+            _temp = '-'.join((str(f[0]),str(f[1])))
+            encoded_frequencies.append(np.where(np.array(default_frequency_bands) == _temp)[0][0])
+
+        return np.array(encoded_frequencies)
 
     def encode_stations(self, sources:list)->np.array:
         """
@@ -118,18 +155,11 @@ class LOFARDataset(Dataset):
             encoded_stations: station names encoded between 0-1
 
         """
-        stations_list = np.array([s.split('_')[2] for s in sources])
-
-        label_encoder = LabelEncoder()
-        integer_encoded = label_encoder.fit_transform(default_stations)
-        onehot_encoder = OneHotEncoder(sparse=False)
-        integer_encoded = integer_encoded.reshape(len(integer_encoded), 1)
-        onehot_encoded = onehot_encoder.fit_transform(integer_encoded)
-        d ={}
-        for i,s in enumerate(default_stations):
-            d[s] = onehot_encoded[i]
-
-        encoded_stations = np.array([d[s] for s in stations_list]) 
+        stations = np.array([s.split('_')[2] for s in sources])
+        #_u = np.unique(stations)
+        #mapping  = np.linspace(0, 1, len(_u))
+        encoded_stations = np.array([np.where(np.array(default_stations) == s)[0][0] for s in stations]) 
+        #encoded_stations = mapping[indexes]
         return encoded_stations
 
     def normalise(self, data:np.array)->np.array:

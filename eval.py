@@ -137,7 +137,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     for anomaly in anomalies:
         z_test= []
         x_hat_test = []
-        _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
+        _, _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
                 batch_size=args.batch_size, 
                 shuffle=False)
@@ -217,7 +217,7 @@ def eval_resnet(resnet:ResNet,
 
     for anomaly in anomalies:
         z_test, x_test = [], []
-        _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
+        _, _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
                 batch_size=args.batch_size, 
                 shuffle=False)

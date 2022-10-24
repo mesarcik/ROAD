@@ -1,43 +1,45 @@
-import torch 
+import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
 import numpy as np
 import matplotlib.pyplot as plt
-from utils.vis import imscatter 
+from utils.vis import imscatter
 from utils.args import args
-from utils.data.defaults import default_stations 
+from utils.data.defaults import default_stations, default_frequency_bands
 import os
 
-from data import get_data 
+from data import get_data
 from models import VAE, ResNet
 from train import train_vae, train_resnet
 from eval import eval_vae, eval_resnet
 
 
 def main():
-    train_dataset, test_dataset = get_data(args)
+    print(args.model_name)
+    train_dataset, val_dataset, test_dataset = get_data(args)
 
-    train_dataloader = DataLoader(train_dataset, 
-            batch_size=args.batch_size, 
-            shuffle=True)
+    train_dataloader = DataLoader(train_dataset,
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
 
-    test_dataloader = DataLoader(test_dataset, 
-            batch_size=args.batch_size, 
-            shuffle=False)
+    test_dataloader = DataLoader(test_dataset,
+                                 batch_size=args.batch_size,
+                                 shuffle=False)
+
     if args.model == 'vae':
-        vae = VAE(in_channels=4, 
-                latent_dim=args.latent_dim,
-                patch_size=args.patch_size, 
-                hidden_dims=args.hidden_dims)
+        vae = VAE(in_channels=4,
+                  latent_dim=args.latent_dim,
+                  patch_size=args.patch_size,
+                  hidden_dims=args.hidden_dims)
         vae = train_vae(train_dataloader, vae, args)
-        #TODO Add eval/train state 
-        #vae.load_state_dict(torch.load('outputs/vae/lightning/vague-hospitable-impala-of-modernism/vae.pt'))
+        # TODO Add eval/train state
+        # vae.load_state_dict(torch.load('outputs/vae/lightning/vague-hospitable-impala-of-modernism/vae.pt'))
         eval_vae(vae, train_dataloader, args, error='nln')
 
-    elif args.model =='resnet':
-        resnet = ResNet(dim=len(default_stations),in_channels=4)
-        resnet = train_resnet(train_dataloader, resnet, args)
+    elif args.model == 'resnet':
+        resnet = ResNet(dim=len(default_frequency_bands), in_channels=4)
+        resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
 

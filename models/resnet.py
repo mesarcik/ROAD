@@ -19,7 +19,7 @@ class ResNet(nn.Module):
 
         self.resnet.fc = nn.Linear(512, self.dim)
 
-        self.loss_fn = nn.BCEWithLogitsLoss()
+        self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, input: torch.tensor, **kwargs):
         return self.resnet(input)
