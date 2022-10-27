@@ -82,18 +82,41 @@ class LOFARDataset(Dataset):
             args:args, 
             sourceTransform=None):# set default types
 
+        source, data, labels, frequency_band = self.exclude_sources(source, 
+                                                                    data, 
+                                                                    labels,
+                                                                    frequency_band)
         self.args = args
-        self.labels = labels
+        self.source = source
+
+        self.labels= np.repeat(labels, int(256/args.patch_size)**2, axis=0)
+        #self.labels = np.concatenate([self.labels, self.labels], axis=0)
+
         self.stations = self.encode_stations(source)
         self.stations = torch.from_numpy(np.repeat(self.stations, int(256/args.patch_size)**2, axis=0))
 
-        _t = data.shape
+
+        #self.stations = np.concatenate([self.stations, 
+        #                                self.stations],axis=0)
+
+        # Need to flatten all polarisations
+        data = self.normalise(data)
+        xx, xy, yx, yy = data[...,0:1], data[...,1:2], data[...,2:3], data[...,3:4]
+        self.polarisations = np.concatenate([[1]*len(xy)],axis=0)
+
+        self.polarisations= torch.from_numpy(np.repeat(self.polarisations, int(256/args.patch_size)**2, axis=0))
+
+
+        self.data = data#np.concatenate([xx,xy], axis=0)
+
+        _t = self.data.shape
         self.original_shape = [_t[0], _t[3], _t[2], _t[1]] # change to be [N,C,...]
 
-        self.data = self.normalise(data)
-        self.plot_spectra(self.data, '/tmp/sample')
         self.data = torch.from_numpy(self.data).permute(0,3,1,2)
         self.data = self.patch(self.data)
+
+        #frequency_band = np.concatenate([frequency_band, 
+        #                                 frequency_band],axis=0)
 
         self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
@@ -112,14 +135,41 @@ class LOFARDataset(Dataset):
             idx = idx.tolist()
 
         datum = self.data[idx,...]
-        label = ''#str('-'.join(self.labels[idx]))
+        label = self.labels[idx]
         frequency = self.frequency_band[idx,...]
         station = self.stations[idx]
+        polarisation = self.polarisations[idx]
 
         if self.sourceTransform:
             datum = self.sourceTransform(datum)
 
-        return datum, label, frequency, station
+        return datum, label, frequency, station, polarisation
+
+    def exclude_sources(self, sources: np.array, *args):
+        """
+            Removes all excluded sources from dataset
+            
+            Parameters
+            ----------
+            sources: list of baselines 
+            args*: optional argument of lists that will modified according to data
+
+            Returns
+            -------
+            data: list of baselines with single channels removed
+            args*: other parameters to be modified 
+
+        """
+        _args = []
+        indx = [i for i, s in enumerate(sources) if s not in excluded_sources]
+        _sources = [sources[i] for i in indx]
+        
+        for a in args:
+            temp_args = []
+            for i in indx:
+                temp_args.append(a[i])
+            _args.append(np.array(temp_args))
+        return np.array(_sources),*_args
 
     def encode_frequencies(self, frequency_band:np.array)->np.array:
         """
@@ -169,8 +219,8 @@ class LOFARDataset(Dataset):
         """
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
-            for pol in range(4):
-                _min, _max = np.percentile(spec[...,pol], [5,95])
+            for pol in range(data.shape[-1]):
+                _min, _max = np.percentile(spec[...,pol], [1,99])
                 temp = np.clip(spec[...,pol],_min, _max)
                 temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
                 _data[i,...,pol] = temp

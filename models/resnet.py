@@ -9,7 +9,7 @@ class ResNet(nn.Module):
         self.in_channels = in_channels
         self.dim = dim
 
-        self.resnet = models.resnet18(pretrained=False)
+        self.resnet = models.resnet18(weights=None)
 
         self.resnet.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                  kernel_size=(7, 7), 

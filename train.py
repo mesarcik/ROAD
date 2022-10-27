@@ -39,7 +39,7 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
-            for _data, _target, _freq, _station in tepoch:
+            for _data, _target, _freq, _station, _pol in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
                 optimizer.zero_grad()
@@ -111,7 +111,7 @@ def train_resnet(
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc = 0.0, 0.0
-            for _data, _target, _freq, _station in tepoch:
+            for _data, _target, _freq, _station, _pol in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
                 # torch.cat((_freq, _station.reshape(-1,1)), dim=1).float().to(args.device)
@@ -128,7 +128,6 @@ def train_resnet(
 
                 _data = val_dataset.data.float().to(args.device)
                 z = resnet(_data).cpu().detach()
-                # TODO
 
                 val_acc = torch.sum(
                     z.argmax(
@@ -137,7 +136,7 @@ def train_resnet(
                 tepoch.set_postfix(loss=loss.item(), val_acc=val_acc.item())
 
             train_loss.append(running_loss / total_step)
-            validation_accuracies.append(val_acc / total_step)
+            validation_accuracies.append(running_acc/ total_step)
             batch_loss = 0
 
             if epoch % 10 == 0:  # TODO: check for model improvement

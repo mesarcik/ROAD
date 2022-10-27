@@ -125,7 +125,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     
     z_train = []
     x_hat_train = []
-    for _data, _target, _freq, _station in train_dataloader:
+    for _data, _target, _freq, _station, _pol in train_dataloader:
         _data = _data.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -142,7 +142,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq, _station in test_dataloader:
+        for _data, _target, _freq, _station, _pol in test_dataloader:
             _data = _data.float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -155,7 +155,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                 # build a flat (CPU) index
                 D, I = nln(z_test, z_train, N, args)
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                                                     anomaly, 
                                                     dists)
 
@@ -171,7 +171,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
         elif error == 'recon':
             error = (x_hat_test - test_dataloader.dataset.data.numpy())**2
             error = integrate(error, test_dataloader.dataset.original_shape, args)
-            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                                                 anomaly, 
                                                 error)
 
@@ -208,7 +208,7 @@ def eval_resnet(resnet:ResNet,
     resnet.eval()
     
     z_train = []
-    for _data, _target, _freq, _station in train_dataloader:
+    for _data, _target, _freq, _station, _pol in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -222,7 +222,7 @@ def eval_resnet(resnet:ResNet,
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq, _station in test_dataloader:
+        for _data, _target, _freq, _station, _pol in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
@@ -253,7 +253,7 @@ def eval_resnet(resnet:ResNet,
                         N,
                         anomaly) 
 
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                                                     anomaly, 
                                                     dists)
 

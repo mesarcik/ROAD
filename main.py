@@ -32,14 +32,15 @@ def main():
                   latent_dim=args.latent_dim,
                   patch_size=args.patch_size,
                   hidden_dims=args.hidden_dims)
-        vae = train_vae(train_dataloader, vae, args)
+        #vae = train_vae(train_dataloader, vae, args)
         # TODO Add eval/train state
-        # vae.load_state_dict(torch.load('outputs/vae/lightning/vague-hospitable-impala-of-modernism/vae.pt'))
+        vae.load_state_dict(torch.load('outputs/vae/lightning/big-khaki-jackal-of-inquire/vae.pt'))
         eval_vae(vae, train_dataloader, args, error='nln')
 
     elif args.model == 'resnet':
         resnet = ResNet(dim=len(default_frequency_bands), in_channels=4)
         resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
+        #resnet.load_state_dict(torch.load('outputs/resnet/lightning/notorious-ancient-lori-of-kindness/resnet.pt'))
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
 
