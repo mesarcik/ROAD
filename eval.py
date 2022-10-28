@@ -208,7 +208,7 @@ def eval_resnet(resnet:ResNet,
     resnet.eval()
     
     z_train = []
-    for _data, _target, _freq, _station, _context in train_dataloader:
+    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -222,7 +222,7 @@ def eval_resnet(resnet:ResNet,
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq, _station, _context in test_dataloader:
+        for _data, _target, _freq, _station, _context,_,_ in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())

@@ -10,8 +10,8 @@ from utils.data.defaults import default_stations, default_frequency_bands
 import os
 
 from data import get_data
-from models import VAE, ResNet
-from train import train_vae, train_resnet
+from models import VAE, ResNet, PositionClassifier
+from train import train_vae, train_resnet, train_position_classifier
 from eval import eval_vae, eval_resnet
 
 
@@ -43,6 +43,12 @@ def main():
         #resnet.load_state_dict(torch.load('outputs/resnet/lightning/notorious-ancient-lori-of-kindness/resnet.pt'))
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
+    elif args.model == 'position_classifier':
+        resnet = ResNet(dim=len(default_frequency_bands), in_channels=4)
+        classifier = PositionClassifier(in_dims=len(default_frequency_bands), out_dims=8)
+        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+        #resnet.load_state_dict(torch.load('outputs/resnet/lightning/notorious-ancient-lori-of-kindness/resnet.pt'))
+        eval_resnet(resnet, train_dataloader, args, error='nln')
 
 if __name__ == '__main__':
     main()

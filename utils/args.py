@@ -8,7 +8,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Radio Astronomy Anomaly Detection (RAAD)')
 
-parser.add_argument('-model',metavar='-m', type=str, default='vae', choices={'vae', 'resnet'}, help = 'Model to train and evaluate')
+parser.add_argument('-model',metavar='-m', type=str, default='vae', choices={'vae', 'resnet', 'position_classifier'}, help = 'Model to train and evaluate')
 parser.add_argument('-limit',metavar='-l', type=str, default='None', help = 'Limit on the number of samples in training data ')
 parser.add_argument('-anomaly_class',metavar='-a', type=str,  default='lightning', help = 'The label of the anomalous class')
 parser.add_argument('-epochs', metavar='-e', type=int, default=100, help = 'The number of epochs for training')

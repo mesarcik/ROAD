@@ -93,16 +93,13 @@ class LOFARDataset(Dataset):
         self.data = torch.from_numpy(data).permute(0,3,1,2)
         self.data = self.patch(self.data)
 
-        context_labels = np.array([np.arange(self.n_patches**2).reshape(self.n_patches, 
-                                                                        self.n_patches)]*self.original_shape[0])
-        self.context_labels = torch.from_numpy(context_labels.reshape(np.prod(context_labels.shape)))
+        (self.context_labels, 
+                self.context_images_pivot, 
+                self.context_images_neighbour) = self.context_prediction(10, args)
 
         self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-#        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
-        #self.frequency_band = ((self.frequency_band- torch.min(self.frequency_band)) / 
-        #                        (torch.max(self.frequency_band) - torch.min(self.frequency_band)))
-
+        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
 
         self.sourceTransform = sourceTransform
 
@@ -118,11 +115,13 @@ class LOFARDataset(Dataset):
         frequency = 17
         station = self.stations[idx]
         context_label = self.context_labels[idx]
+        context_image_pivot = self.context_images_pivot[idx]
+        context_image_neighbour = self.context_images_neighbour[idx]
 
         if self.sourceTransform:
             datum = self.sourceTransform(datum)
 
-        return datum, label, frequency, station, context_label
+        return datum, label, frequency, station, context_label, context_image_pivot, context_image_neighbour
 
     def exclude_sources(self, sources: np.array, *args):
         """
@@ -243,3 +242,106 @@ class LOFARDataset(Dataset):
                 self.args.patch_size, 
                 self.args.patch_size)
         return patches
+
+    def context_prediction(self, N:int, args:args) -> (torch.tensor, torch.tensor, torch.tensor):
+        """
+            Arranges a context prediction dataset
+            
+            Parameters
+            ----------
+            N: Number of context samples to choose per image
+            args: cmd arugments
+
+            Returns
+            -------
+            patches: tensor of patches reshaped to (N*(h/size)*(w/size),C,h/size, w/size)
+
+        """
+
+        context_labels = np.ones([self.data.shape[0]],dtype='int')*88
+        context_images_pivot  = np.ones([self.data.shape[0],
+                                          4,
+                                          args.patch_size, 
+                                          args.patch_size],dtype='float32')
+        context_images_neighbour = np.zeros([self.data.shape[0],
+                                             4,
+                                             args.patch_size, 
+                                             args.patch_size],dtype='float32')
+        _indx = 0
+        _locations = [-self.n_patches-1, -self.n_patches, -self.n_patches+1, -1, +1, +self.n_patches-1, +self.n_patches, +self.n_patches+1]
+
+        for _image_indx in range(self.n_patches**2, self.data.shape[0]+1,self.n_patches**2):
+            #_patch_indexes = np.random.randint(low=0, high=self.n_patches**2, size=(N,))
+            temp_patches = self.data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
+
+            for _patch_index in range(self.n_patches**2):
+                if _patch_index < self.n_patches:
+                    # TOPRIGHT 
+                    if _patch_index % self.n_patches == self.n_patches-1:
+                        #options are 3,5,6
+                        context_labels[_indx] =np.random.choice([3,5,6])
+                        #[-1               ,       X        ]
+                        #[+self.n_patches-1, +self.n_patches]
+
+                    # TOPLEFT 
+                    elif _patch_index % self.n_patches == 0:
+                        #options are 4,6,7
+                        context_labels[_indx] = np.random.choice([4,6,7]) 
+                        #[      X        ,                 1]
+                        #[+self.n_patches, +self.n_patches+1]
+
+                    else: #TOPMIDDLE
+                        #options are 3,4,5,6,7
+                        context_labels[_indx] = np.random.choice([3,4,5,6,7])
+                        #[-1               ,       X        ,                 1]
+                        #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
+
+                elif _patch_index >= self.n_patches**2 -self.n_patches:
+                    # BOTTOMRIGHT 
+                    if _patch_index % self.n_patches == self.n_patches-1:
+                        #options are 0,1,3
+                        context_labels[_indx] =  np.random.choice([0,1,3])
+                        #[-self.n_patches-1, -self.n_patches]
+                        #[-1               ,       X        ]
+
+                    # BOTTOMLEFT 
+                    elif _patch_index % self.n_patches == 0:
+                        #options are 1,2,4
+                        context_labels[_indx] =  np.random.choice([1,2,4])
+                        #[-self.n_patches, -self.n_patches+1]
+                        #[      X        ,                 1]
+
+                    else: #BOTTOMMIDDLE
+                        #options are 0,1,2,3,4
+                        context_labels[_indx] = np.random.choice([0,1,2,3,4])
+                        #[-self.n_patches-1, -self.n_patches, -self.n_patches+1]
+                        #[-1               ,       X        ,                 1]
+
+                elif _patch_index % self.n_patches == self.n_patches-1: #RIGHT
+                    #options are 0,1,3,5,6
+                    context_labels[_indx] = np.random.choice([0,1,3,5,6])
+                    #[-self.n_patches-1, -self.n_patches]
+                    #[-1               ,       X        ]
+                    #[+self.n_patches-1, +self.n_patches]
+
+                elif _patch_index % self.n_patches == 0: #LEFT
+                    #options are 1,2,4,6,7
+                    context_labels[_indx] = np.random.choice([1,2,4,6,7])
+                    #[ -self.n_patches, -self.n_patches+1]
+                    #[       X        ,                 1]
+                    #[ +self.n_patches, +self.n_patches+1]
+                
+                else: #MIDDEL
+                    #options are 0,1,2,3,4,5,6,7
+                    context_labels[_indx] = np.random.choice([0,1,2,3,4,5,6,7])
+                    #[-self.n_patches-1, -self.n_patches, -self.n_patches+1]
+                    #[-1               ,       X        ,                 1]
+                    #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
+                context_images_pivot[_indx,:] = temp_patches[_patch_index]   
+                context_images_neighbour[_indx,:] = temp_patches[_locations[context_labels[_indx]]]
+                _indx +=1
+        context_labels = torch.from_numpy(context_labels)
+        context_images_pivot = torch.from_numpy(context_images_pivot)
+        context_images_neighbour = torch.from_numpy(context_images_neighbour)
+
+        return context_labels, context_images_pivot, context_images_neighbour
