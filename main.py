@@ -38,7 +38,7 @@ def main():
         eval_vae(vae, train_dataloader, args, error='nln')
 
     elif args.model == 'resnet':
-        resnet = ResNet(dim=len(default_frequency_bands), in_channels=4)
+        resnet = ResNet(dim=test_dataset.n_patches**2, in_channels=4)
         resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
         #resnet.load_state_dict(torch.load('outputs/resnet/lightning/notorious-ancient-lori-of-kindness/resnet.pt'))
         eval_resnet(resnet, train_dataloader, args, error='nln')

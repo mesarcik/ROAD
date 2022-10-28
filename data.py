@@ -15,13 +15,6 @@ from utils.data.defaults import *
 def get_data(args, anomaly:str=None):
     hf = h5py.File(args.data_path,'r')
 
-    #TODO Fix limit
-    #if args.limit != 'None':
-    #    mask = np.random.randint(low=0, high= len(train_data), size=int(args.limit)) 
-    #    train_data = [train_data[m] for m in mask] 
-    #    train_labels = [train_labels[m] for m in mask]
-    #    train_frequency = [train_frequency[m] for m in mask] 
-
     (train_data, val_data, 
     train_labels, val_labels, 
     train_frequency_band, val_frequency_band,
@@ -82,45 +75,31 @@ class LOFARDataset(Dataset):
             args:args, 
             sourceTransform=None):# set default types
 
-        source, data, labels, frequency_band = self.exclude_sources(source, 
-                                                                    data, 
-                                                                    labels,
-                                                                    frequency_band)
         self.args = args
         self.source = source
+        self.n_patches = int(256/args.patch_size)
 
-        self.labels= np.repeat(labels, int(256/args.patch_size)**2, axis=0)
-        #self.labels = np.concatenate([self.labels, self.labels], axis=0)
+        self.labels= np.repeat(labels, self.n_patches**2, axis=0)
 
         self.stations = self.encode_stations(source)
-        self.stations = torch.from_numpy(np.repeat(self.stations, int(256/args.patch_size)**2, axis=0))
-
-
-        #self.stations = np.concatenate([self.stations, 
-        #                                self.stations],axis=0)
+        self.stations = torch.from_numpy(np.repeat(self.stations, self.n_patches**2, axis=0))
 
         # Need to flatten all polarisations
         data = self.normalise(data)
-        xx, xy, yx, yy = data[...,0:1], data[...,1:2], data[...,2:3], data[...,3:4]
-        self.polarisations = np.concatenate([[1]*len(xy)],axis=0)
 
-        self.polarisations= torch.from_numpy(np.repeat(self.polarisations, int(256/args.patch_size)**2, axis=0))
-
-
-        self.data = data#np.concatenate([xx,xy], axis=0)
-
-        _t = self.data.shape
+        _t = data.shape
         self.original_shape = [_t[0], _t[3], _t[2], _t[1]] # change to be [N,C,...]
 
-        self.data = torch.from_numpy(self.data).permute(0,3,1,2)
+        self.data = torch.from_numpy(data).permute(0,3,1,2)
         self.data = self.patch(self.data)
 
-        #frequency_band = np.concatenate([frequency_band, 
-        #                                 frequency_band],axis=0)
+        context_labels = np.array([np.arange(self.n_patches**2).reshape(self.n_patches, 
+                                                                        self.n_patches)]*self.original_shape[0])
+        self.context_labels = torch.from_numpy(context_labels.reshape(np.prod(context_labels.shape)))
 
         self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
+#        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
         #self.frequency_band = ((self.frequency_band- torch.min(self.frequency_band)) / 
         #                        (torch.max(self.frequency_band) - torch.min(self.frequency_band)))
 
@@ -136,14 +115,14 @@ class LOFARDataset(Dataset):
 
         datum = self.data[idx,...]
         label = self.labels[idx]
-        frequency = self.frequency_band[idx,...]
+        frequency = 17
         station = self.stations[idx]
-        polarisation = self.polarisations[idx]
+        context_label = self.context_labels[idx]
 
         if self.sourceTransform:
             datum = self.sourceTransform(datum)
 
-        return datum, label, frequency, station, polarisation
+        return datum, label, frequency, station, context_label
 
     def exclude_sources(self, sources: np.array, *args):
         """
@@ -220,7 +199,7 @@ class LOFARDataset(Dataset):
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
             for pol in range(data.shape[-1]):
-                _min, _max = np.percentile(spec[...,pol], [1,99])
+                _min, _max = np.percentile(spec[...,pol], [5,95])
                 temp = np.clip(spec[...,pol],_min, _max)
                 temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
                 _data[i,...,pol] = temp

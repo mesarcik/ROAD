@@ -91,7 +91,7 @@ def compute_metrics(labels:np.array, anomaly:str, pred:np.array)->(float, float,
     """
     assert len(labels) == len(pred), "The length of predictions != length of labels"
 
-    _ground_truth = [l == anomaly for l in labels]
+    _ground_truth = [anomaly in l for l in labels]
 
     fpr,tpr, thr = roc_curve(_ground_truth, pred)
     auroc = auc(fpr, tpr)
@@ -125,7 +125,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     
     z_train = []
     x_hat_train = []
-    for _data, _target, _freq, _station, _pol in train_dataloader:
+    for _data, _target, _freq, _station, _context in train_dataloader:
         _data = _data.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -142,7 +142,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq, _station, _pol in test_dataloader:
+        for _data, _target, _freq, _station, _context in test_dataloader:
             _data = _data.float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -208,7 +208,7 @@ def eval_resnet(resnet:ResNet,
     resnet.eval()
     
     z_train = []
-    for _data, _target, _freq, _station, _pol in train_dataloader:
+    for _data, _target, _freq, _station, _context in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -222,7 +222,7 @@ def eval_resnet(resnet:ResNet,
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq, _station, _pol in test_dataloader:
+        for _data, _target, _freq, _station, _context in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
