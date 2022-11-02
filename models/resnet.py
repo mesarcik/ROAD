@@ -18,11 +18,14 @@ class ResNet(nn.Module):
                                  bias=False)
 
         self.resnet.fc = nn.Linear(512, self.dim)
+        self.bn = nn.BatchNorm1d(num_features=self.dim)
 
         self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, input: torch.tensor, **kwargs):
-        return self.resnet(input)
+        x = self.resnet(input)
+        x = self.bn(x)
+        return x
 
     def embed(self, input:torch.tensor) -> torch.tensor:
         modules=list(self.resnet.children())[:-1]

@@ -57,7 +57,6 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
                     recon_loss=loss['Reconstruction_Loss'].item(),
                     total_loss=loss['loss'].item())
             train_loss.append(running_loss / total_step)
-            batch_loss = 0
 
             if epoch % 50 == 0:  # TODO: check for model improvement
                 torch.save(vae.state_dict(), '{}/vae.pt'.format(model_path))
@@ -138,7 +137,6 @@ def train_resnet(
 
             train_loss.append(running_loss / total_step)
             validation_accuracies.append(running_acc/ total_step)
-            batch_loss = 0
 
             if epoch % 50 == 0:  # TODO: check for model improvement
                 # print validation loss
@@ -191,19 +189,22 @@ def train_position_classifier(
 
     resnet.to(args.device)
     classifier.to(args.device)
-    modules = [resnet, classifier]
-    params = [list(module.parameters()) for module in modules]
-    params = reduce(lambda x, y: x + y, params)
-    optimizer = torch.optim.Adam(
-        params,
-        lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
+    encoder_optimizer = torch.optim.Adam(
+        resnet.parameters(),
+        lr=1e-3)  # , lr=0.0001, momentum=0.9)
 
-    train_loss, validation_accuracies, context_accuracies = [], [],[]
+    classifier_optimizer = torch.optim.Adam(
+        classifier.parameters(),
+        lr=1e-2)  # , lr=0.0001, momentum=0.9)
+
+    total_train_loss, encoder_train_loss, location_train_loss, dist_train_loss = [], [], [],[]
+    validation_accuracies, context_accuracies = [], []
     total_step = len(train_dataloader)
 
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
-            running_loss, running_acc, running_cont = 0.0, 0.0, 0.0
+            running_loss, encoder_loss, location_loss, running_dist_loss =  0.0, 0.0, 0.0, 0.0
+            running_acc, running_cont = 0.0, 0.0
             for _, _target, _freq, _station, _context_label, _context_pivot, _context_neighbour in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
 
@@ -212,28 +213,39 @@ def train_position_classifier(
                 _freq = _freq.to(args.device)
                 _context_label= _context_label.to(args.device)
 
-                optimizer.zero_grad()
+                encoder_optimizer.zero_grad()
+                classifier_optimizer.zero_grad()
+
+                z = resnet(_context_pivot)
+                resnet_loss = torch.tensor(0)#resnet.loss_function(z, _freq)['loss']
 
                 z0 = resnet(_context_pivot)
-                resnet_loss = resnet.loss_function(z0, _freq)['loss']
-
                 z1 = resnet(_context_neighbour)
+
+                #diff = z0-z1 
+                #l2 = diff.norm(dim=1)
+                dist_loss =torch.tensor(0)# l2.mean()
+
                 c = classifier(z0,z1)
                 classifier_loss = classifier.loss_function(c, _context_label)['loss']
 
-                loss = resnet_loss + classifier_loss
+                loss =  classifier_loss #+ 0.2*dist_loss +0.5*resnet_loss +
 
                 loss.backward()
-                optimizer.step()
+                encoder_optimizer.step()
+                classifier_optimizer.step()
 
                 running_loss += loss.item()
+                running_dist_loss += dist_loss.item()
+                encoder_loss += resnet_loss.item()
+                location_loss += classifier_loss.item()
 
                 _data = val_dataset.data.float().to(args.device)
                 z = resnet(_data).cpu().detach()
 
-                val_acc_freq = torch.sum(
-                    z.argmax(
-                        dim=-1) == val_dataset.frequency_band) / val_dataset.frequency_band.shape[0]
+                val_acc_freq = 0#torch.sum(
+                    #z.argmax(
+                    #    dim=-1) == val_dataset.frequency_band) / val_dataset.frequency_band.shape[0]
                 running_acc += val_acc_freq
                 
                 _pivot = val_dataset.context_images_pivot.float().to(args.device)
@@ -248,12 +260,19 @@ def train_position_classifier(
                         dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
                 running_cont += val_acc_context
 
-                tepoch.set_postfix(loss=loss.item(), val_acc_freq=val_acc_freq.item(), val_acc_context=val_acc_context.item())
+                tepoch.set_postfix(total_loss=loss.item(), 
+                                   encoder_loss=resnet_loss.item(), 
+                                   location_loss=classifier_loss.item(), 
+                                   dist_loss=running_dist_loss, 
+                                   val_acc_context=val_acc_context.item())
 
-            train_loss.append(running_loss / total_step)
+            total_train_loss.append(running_loss / total_step)
+            encoder_train_loss.append(encoder_loss / total_step)
+            location_train_loss.append(location_loss / total_step)
+            dist_train_loss.append(running_dist_loss/ total_step)
+
             validation_accuracies.append(running_acc/ total_step)
             context_accuracies.append(running_cont/ total_step)
-            batch_loss = 0
 
             if epoch % 20 == 0:  # TODO: check for model improvement
                 # print validation loss
@@ -266,16 +285,18 @@ def train_position_classifier(
                 z = TSNE(n_components=2,
                          learning_rate='auto',
                          init='random',
-                         perplexity=3).fit_transform(Z)
+                         perplexity=30).fit_transform(Z)
 
                 _inputs = _data.cpu().detach().numpy()
                 imscatter(z, _inputs, model_path, epoch)
             loss_curve(model_path,
                        epoch,
-                       total_loss=train_loss,
+                       total_loss=total_train_loss,
+                       encoder_loss=encoder_train_loss,
+                       location_loss=location_train_loss,
+                       dist_loss=dist_train_loss,
                        validation_accuracy=validation_accuracies,
                        context_accuracies=context_accuracies)
-            for module in modules:
-                module.train()
+            classifier.train()
             resnet.train()
     return resnet

@@ -5,7 +5,6 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder,OneHotEncoder
 import h5py 
 
 from utils import args
@@ -99,7 +98,7 @@ class LOFARDataset(Dataset):
 
         self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
+#        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
 
         self.sourceTransform = sourceTransform
 
@@ -112,7 +111,7 @@ class LOFARDataset(Dataset):
 
         datum = self.data[idx,...]
         label = self.labels[idx]
-        frequency = 17
+        frequency = 0#self.frequency_band[idx] 
         station = self.stations[idx]
         context_label = self.context_labels[idx]
         context_image_pivot = self.context_images_pivot[idx]
@@ -122,32 +121,6 @@ class LOFARDataset(Dataset):
             datum = self.sourceTransform(datum)
 
         return datum, label, frequency, station, context_label, context_image_pivot, context_image_neighbour
-
-    def exclude_sources(self, sources: np.array, *args):
-        """
-            Removes all excluded sources from dataset
-            
-            Parameters
-            ----------
-            sources: list of baselines 
-            args*: optional argument of lists that will modified according to data
-
-            Returns
-            -------
-            data: list of baselines with single channels removed
-            args*: other parameters to be modified 
-
-        """
-        _args = []
-        indx = [i for i, s in enumerate(sources) if s not in excluded_sources]
-        _sources = [sources[i] for i in indx]
-        
-        for a in args:
-            temp_args = []
-            for i in indx:
-                temp_args.append(a[i])
-            _args.append(np.array(temp_args))
-        return np.array(_sources),*_args
 
     def encode_frequencies(self, frequency_band:np.array)->np.array:
         """
@@ -338,7 +311,7 @@ class LOFARDataset(Dataset):
                     #[-1               ,       X        ,                 1]
                     #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
                 context_images_pivot[_indx,:] = temp_patches[_patch_index]   
-                context_images_neighbour[_indx,:] = temp_patches[_locations[context_labels[_indx]]]
+                context_images_neighbour[_indx,:] = temp_patches[_patch_index + _locations[context_labels[_indx]]]
                 _indx +=1
         context_labels = torch.from_numpy(context_labels)
         context_images_pivot = torch.from_numpy(context_images_pivot)

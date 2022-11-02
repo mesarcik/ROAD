@@ -248,7 +248,7 @@ def eval_resnet(resnet:ResNet,
                     io(5, 
                         x_recon, 
                         recon_dists,
-                        'outputs/{}/{}/{}/{}'.format(args.model, args.anomaly_class, args.model_name, 'reconstructions'),
+                        'outputs/{}/{}/{}'.format(args.model, args.model_name, 'reconstructions'),
                         -1, 
                         N,
                         anomaly) 

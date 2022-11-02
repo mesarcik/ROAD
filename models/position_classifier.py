@@ -4,37 +4,6 @@ import torch.nn.functional as F
 
 import math
 
-class NormalizedLinear(nn.Module):
-    __constants__ = ['bias', 'in_features', 'out_features']
-
-    def __init__(self, in_features, out_features, bias=True):
-        super(NormalizedLinear, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = nn.Parameter(torch.Tensor(out_features, in_features))
-        if bias:
-            self.bias = nn.Parameter(torch.Tensor(out_features))
-        else:
-            self.register_parameter('bias', None)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        if self.bias is not None:
-            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in)
-            nn.init.uniform_(self.bias, -bound, bound)
-
-    def forward(self, x):
-        with torch.no_grad():
-            w = self.weight / self.weight.data.norm(keepdim=True, dim=0)
-        return F.linear(x, w, self.bias)
-
-    def extra_repr(self):
-        return 'in_features={}, out_features={}, bias={}'.format(
-            self.in_features, self.out_features, self.bias is not None
-        )
-
 class PositionClassifier(nn.Module):
     def __init__(self, in_dims:int, out_dims:int, class_num=8):
         super().__init__()
@@ -44,10 +13,11 @@ class PositionClassifier(nn.Module):
         modules.append(nn.Linear(in_dims, 128))
         modules.append(nn.LeakyReLU(0.1))
 
-        modules.append(nn.Linear(128, 128))
+        modules.append(nn.Linear(128, 64))
         modules.append(nn.LeakyReLU(0.1))
 
-        modules.append(NormalizedLinear(128, out_dims))
+        modules.append(nn.Linear(64, out_dims))
+        modules.append(nn.BatchNorm1d(num_features=out_dims))
 
         self.model = nn.Sequential(*modules)
         self.loss_fn = nn.CrossEntropyLoss()
