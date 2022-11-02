@@ -98,7 +98,7 @@ class LOFARDataset(Dataset):
 
         self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-#        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
+        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
 
         self.sourceTransform = sourceTransform
 
@@ -111,7 +111,7 @@ class LOFARDataset(Dataset):
 
         datum = self.data[idx,...]
         label = self.labels[idx]
-        frequency = 0#self.frequency_band[idx] 
+        frequency = self.frequency_band[idx] 
         station = self.stations[idx]
         context_label = self.context_labels[idx]
         context_image_pivot = self.context_images_pivot[idx]
@@ -136,10 +136,9 @@ class LOFARDataset(Dataset):
 
         """
         encoded_frequencies = []
-
         for f in frequency_band:
             _temp = '-'.join((str(f[0]),str(f[1])))
-            encoded_frequencies.append(np.where(np.array(default_frequency_bands) == _temp)[0][0])
+            encoded_frequencies.append(np.where(np.array(default_frequency_bands[self.args.patch_size]) == _temp)[0][0])
 
         return np.array(encoded_frequencies)
 

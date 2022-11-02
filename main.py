@@ -44,9 +44,12 @@ def main():
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
     elif args.model == 'position_classifier':
-        resnet = ResNet(dim=32, in_channels=4)
-        classifier = PositionClassifier(in_dims=32, out_dims=8)# 512 because that is the embedding dimensionality of the resnet 
+        resnet = ResNet(dim=len(default_frequency_bands[args.patch_size]), 
+                        in_channels=4)
+        classifier = PositionClassifier(in_dims=len(default_frequency_bands[args.patch_size]), 
+                                       out_dims=8)
         resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+
         #resnet.load_state_dict(torch.load('outputs/position_classifier/cuddly-heavy-binturong-of-gallantry/resnet.pt'))
         eval_resnet(resnet, train_dataloader, args, error='nln')
 

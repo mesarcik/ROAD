@@ -217,7 +217,7 @@ def train_position_classifier(
                 classifier_optimizer.zero_grad()
 
                 z = resnet(_context_pivot)
-                resnet_loss = torch.tensor(0)#resnet.loss_function(z, _freq)['loss']
+                resnet_loss = resnet.loss_function(z, _freq)['loss']
 
                 z0 = resnet(_context_pivot)
                 z1 = resnet(_context_neighbour)
@@ -229,7 +229,7 @@ def train_position_classifier(
                 c = classifier(z0,z1)
                 classifier_loss = classifier.loss_function(c, _context_label)['loss']
 
-                loss =  classifier_loss #+ 0.2*dist_loss +0.5*resnet_loss +
+                loss =  resnet_loss + classifier_loss #+ 0.2*dist_loss  +
 
                 loss.backward()
                 encoder_optimizer.step()
@@ -243,9 +243,9 @@ def train_position_classifier(
                 _data = val_dataset.data.float().to(args.device)
                 z = resnet(_data).cpu().detach()
 
-                val_acc_freq = 0#torch.sum(
-                    #z.argmax(
-                    #    dim=-1) == val_dataset.frequency_band) / val_dataset.frequency_band.shape[0]
+                val_acc_freq = torch.sum(
+                    z.argmax(
+                        dim=-1) == val_dataset.frequency_band) / val_dataset.frequency_band.shape[0]
                 running_acc += val_acc_freq
                 
                 _pivot = val_dataset.context_images_pivot.float().to(args.device)
@@ -264,6 +264,7 @@ def train_position_classifier(
                                    encoder_loss=resnet_loss.item(), 
                                    location_loss=classifier_loss.item(), 
                                    dist_loss=running_dist_loss, 
+                                   val_acc_freq=val_acc_freq.item(),
                                    val_acc_context=val_acc_context.item())
 
             total_train_loss.append(running_loss / total_step)
