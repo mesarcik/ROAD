@@ -41,11 +41,6 @@ class PositionClassifier(nn.Module):
 
         return {'loss':loss}
 
-    def forward(self, h1, h2):
-        h1 = h1.view(-1, self.in_dims)
-        h2 = h2.view(-1, self.in_dims)
-
-        h = h1 - h2
-        h = self.model(h)
-
-        return h
+    def forward(self, input:torch.tensor):
+        z = self.model(input)
+        return z

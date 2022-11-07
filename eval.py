@@ -125,7 +125,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     
     z_train = []
     x_hat_train = []
-    for _data, _target, _freq, _station, _context in train_dataloader:
+    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
         _data = _data.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -142,7 +142,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq, _station, _context in test_dataloader:
+        for _data, _target, _freq, _station, _context, _, _ in test_dataloader:
             _data = _data.float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())

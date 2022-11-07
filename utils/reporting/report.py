@@ -5,18 +5,19 @@ from utils import args
 
 def save_results(args:args,**kwargs):
     # get AUROC, AUPRC, F1 and save into csv 
-    if not os.path.exists('outputs/results_LOFAR_AD.csv'):
+    if not os.path.exists('outputs/results_LOFAR_AD_amount.csv'):
         df = pd.DataFrame(columns = ['Model',
                                      'Name',
                                      'Latent_Dim',
                                      'Patch_Size',
                                      'Class',
+                                     'Amount',
                                      'Neighbour',
                                      'AUROC',
                                      'AUPRC',
                                      'F1'])
     else:  
-        df = pd.read_csv('outputs/results_LOFAR_AD.csv')
+        df = pd.read_csv('outputs/results_LOFAR_AD_amount.csv')
 
     df = pd.concat([df, 
                     pd.DataFrame({'Model':args.model,
@@ -24,11 +25,12 @@ def save_results(args:args,**kwargs):
                     'Latent_Dim':args.latent_dim,
                     'Patch_Size':args.patch_size,
                     'Class':kwargs['anomaly'],
+                    'Amount':args.amount,
                     'Neighbour':kwargs['neighbour'],
                     'AUROC':kwargs['auroc'],
                     'AUPRC':kwargs['auprc'],
                     'F1':kwargs['f1_score']},index=[0])],
                     axis=0, join='outer', ignore_index=True)
 
-    df.to_csv('outputs/results_LOFAR_AD.csv',index=False)
+    df.to_csv('outputs/results_LOFAR_AD_amount.csv',index=False)
 

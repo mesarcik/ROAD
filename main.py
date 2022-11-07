@@ -32,9 +32,9 @@ def main():
                   latent_dim=args.latent_dim,
                   patch_size=args.patch_size,
                   hidden_dims=args.hidden_dims)
-        #vae = train_vae(train_dataloader, vae, args)
+        vae = train_vae(train_dataloader, vae, args)
         # TODO Add eval/train state
-        vae.load_state_dict(torch.load('outputs/vae/lightning/big-khaki-jackal-of-inquire/vae.pt'))
+        #vae.load_state_dict(torch.load('outputs/vae/lightning/big-khaki-jackal-of-inquire/vae.pt'))
         eval_vae(vae, train_dataloader, args, error='nln')
 
     elif args.model == 'resnet':
@@ -44,10 +44,10 @@ def main():
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
     elif args.model == 'position_classifier':
-        resnet = ResNet(dim=len(default_frequency_bands[args.patch_size]), 
+        resnet = ResNet(out_dims=8, 
                         in_channels=4)
-        classifier = PositionClassifier(in_dims=len(default_frequency_bands[args.patch_size]), 
-                                       out_dims=8)
+        classifier = PositionClassifier(in_dims=512, 
+                                       out_dims=len(default_frequency_bands[args.patch_size]))
         resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
 
         #resnet.load_state_dict(torch.load('outputs/position_classifier/cuddly-heavy-binturong-of-gallantry/resnet.pt'))

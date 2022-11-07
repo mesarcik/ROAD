@@ -6,6 +6,7 @@ from tqdm import tqdm
 from defaults import anomalies, SIZE 
 import cv2
 import copy
+from datetime import datetime
 
 def remove_singles(data: list, *args) -> list:
     """
@@ -74,7 +75,7 @@ def create_dataset()->None:
         -------
 
     """
-    hf = h5py.File('/data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset.h5', 'w')
+    hf = h5py.File('/data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_{}.h5'.format(datetime.now().strftime('%d-%m-%y')), 'w')
     train_group = hf.create_group('train_data')
     test_group = hf.create_group('test_data')
     anomalies_group = hf.create_group('anomaly_data')
