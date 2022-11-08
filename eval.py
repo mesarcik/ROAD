@@ -6,7 +6,7 @@ from models import VAE, ResNet
 from utils import args
 from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
-from utils.vis import io
+from utils.vis import io, nln_io
 from data import get_data
 from utils.data import anomalies 
 from utils.data.patches import reconstruct, reconstruct_distances
@@ -207,13 +207,15 @@ def eval_resnet(resnet:ResNet,
     resnet.to(args.device)
     resnet.eval()
     
-    z_train = []
+    z_train, x_train = [],[]
     for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
+        x_train.append(_data.cpu().detach().numpy())
 
     z_train = np.vstack(z_train) 
+    x_train = np.vstack(x_train) 
 
     for anomaly in anomalies:
         z_test, x_test = [], []
@@ -233,35 +235,46 @@ def eval_resnet(resnet:ResNet,
             x_recon = reconstruct(x_test, args)
 
         if error == 'nln':
-            for N in args.neighbours:
+            N = int(np.max(args.neighbours))
+            _D, _I = nln(z_test, z_train, N, args)
+
+            if plot:
+                neighbours = x_train[_I]
+                neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
+                                            for i in range(neighbours.shape[1])])
+                D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(256//args.patch_size)**2 ,
+                                                          int(256//args.patch_size),
+                                                          int(256//args.patch_size))
+                                        for i in range(neighbours.shape[1])])
+
+                _min, _max = np.percentile(D, [1,99])
+                D = np.clip(D,_min, _max)
+                D = ((D - D.min()) / (D.max() - D.min()))
+
+
+                nln_io(5, 
+                    x_recon, 
+                    neighbours_recon,
+                    test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
+                    D,
+                    'outputs/{}/{}'.format(args.model, args.model_name),
+                    -1, 
+                    anomaly) 
+
+            for n in range(1,N+1):
                 # build a flat (CPU) index
-                D, I = nln(z_test, z_train, N, args)
+                D,I = _D[:,:n], _I[:,:n]
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
-
-                if plot:
-                    _min, _max = np.percentile(D, [1,99])
-                    D= np.clip(D,_min, _max)
-                    recon_dists = reconstruct_distances(D, args)
-                    recon_dists = ((recon_dists- recon_dists.min()) / 
-                                            (recon_dists.max() - recon_dists.min()))
-
-                    io(5, 
-                        x_recon, 
-                        recon_dists,
-                        'outputs/{}/{}/{}'.format(args.model, args.model_name, 'reconstructions'),
-                        -1, 
-                        N,
-                        anomaly) 
 
                 auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                                                     anomaly, 
                                                     dists)
 
-                print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1))
+                print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(n, auroc, auprc, f1))
 
                 save_results(args, 
                         anomaly=anomaly,
-                        neighbour=N,
+                        neighbour=n,
                         auroc=auroc, 
                         auprc=auprc, 
                         f1_score=f1)

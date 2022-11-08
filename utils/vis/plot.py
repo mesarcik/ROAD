@@ -26,7 +26,13 @@ def imscatter(z:np.array, inputs:np.array, path:str, epoch:int, ax=None, zoom=1)
     plt.savefig('{}/epoch_embedding_{}'.format(_dir,epoch),dpi=98)
     plt.close('all')
 
-def io(n_plots:int,inputs:np.array, reconstructions:np.array,path:str, epoch:int, neighbours:int=0, anomaly:str='')->None:
+def io(n_plots:int,
+       inputs:np.array, 
+       reconstructions:np.array,
+       path:str, 
+       epoch:int, 
+       neighbours:int=0, 
+       anomaly:str='')->None:
     """
         Plots input and reconstructions
     """
@@ -41,6 +47,36 @@ def io(n_plots:int,inputs:np.array, reconstructions:np.array,path:str, epoch:int
         os.makedirs(_dir)
     plt.savefig('{}/{}_epoch_output_{}_{}'.format(_dir, anomaly, epoch, neighbours),dpi=98)
     plt.close(fig)
+
+
+def nln_io(n_plots:int,
+        x_test:np.array, 
+        neighbours:np.array,
+        labels:np.array,
+        D:np.array,
+        path:str, 
+        epoch:int, 
+        anomaly:str='')->None:
+    """
+        Plots input and neighbours
+    """
+    fig,axs = plt.subplots(n_plots*2,neighbours.shape[0]+1,figsize=(10,5));
+    for i in range(0,n_plots*2,2):
+        r = np.random.randint(len(x_test))
+        axs[i][0].imshow(x_test[r,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+        axs[i][0].set_title("Input", fonsize=3)
+        axs[i][0].axis('off')
+        axs[i+1][0].axis('off')
+        for n in range(neighbours.shape[0]):
+            axs[i][n+1].imshow(neighbours[n,r,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+            axs[i][n+1].set_title("{}".format(labels[r], fontsize=3))
+            axs[i][n+1].axis('off')
+            axs[i+1,n+1].imshow(D[n,r,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+            axs[i+1][n+1].axis('off')
+
+    plt.savefig('{}/{}'.format(path, anomaly),dpi=300)
+    plt.close('all')
+
 
 def loss_curve(path:str,epoch:int, **kwargs)->None:
     plt.title("Train-Validation Accuracy")

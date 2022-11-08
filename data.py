@@ -17,10 +17,10 @@ def get_data(args, anomaly:str=None):
     (train_data, val_data, 
     train_labels, val_labels, 
     train_frequency_band, val_frequency_band,
-    train_source, val_source) = train_test_split(hf['train_data/data'][:],#_join(hf, None, args.amount,'data'), 
-                                                 hf['train_data/labels'][:].astype(str),#_join(hf, None, args.amount, 'labels').astype(str), 
-                                                 hf['train_data/frequency_band'][:],#_join(hf, None, args.amount, 'frequency_band'), 
-                                                 hf['train_data/source'][:].astype(str),#_join(hf, None, args.amount, 'source').astype(str), 
+    train_source, val_source) = train_test_split(_temp_join_test(hf, args.amount,'data'), #hf['train_data/data'][:],#
+                                                 _temp_join_test(hf, args.amount, 'labels').astype(str), #hf['train_data/labels'][:].astype(str),#
+                                                 _temp_join_test(hf, args.amount, 'frequency_band'), #hf['train_data/frequency_band'][:],#
+                                                 _temp_join_test(hf, args.amount, 'source').astype(str), #hf['train_data/source'][:].astype(str),#
                                                  test_size=0.05, 
                                                  random_state=args.seed)
 
@@ -37,15 +37,28 @@ def get_data(args, anomaly:str=None):
                                  args)
 
     if anomaly is None: anomaly = args.anomaly_class
-    test_dataset = LOFARDataset(_join(hf, anomaly, args.amount, 'data'),
-                                _join(hf, anomaly, args.amount, 'labels').astype(str),
-                                _join(hf, anomaly, args.amount, 'frequency_band'),
-                                _join(hf, anomaly, args.amount, 'source').astype(str),
+    test_dataset = LOFARDataset(_join(hf, anomaly, 'data'),
+                                _join(hf, anomaly, 'labels').astype(str),
+                                _join(hf, anomaly, 'frequency_band'),
+                                _join(hf, anomaly, 'source').astype(str),
                                 args)
 
     return train_dataset, val_dataset, test_dataset
+
+def _temp_join_test(hf:h5py.File,amount:float ,field:str):
+    """
+        temp function to evaluate how much data we need to add
+
+    """
+
+    _test = hf['test_data/{}'.format(field)][:]
+    _indx  = np.random.default_rng(42).choice(len(_test), size=int(len(_test)*amount)) 
+    data = np.concatenate([_test[_indx], 
+                         hf['train_data/{}'.format(field)][:]],axis=0)
+    return data
+
                         
-def _join(hf:h5py.File, anomaly:str, amount:float,field:str)->np.array:
+def _join(hf:h5py.File, anomaly:str, field:str)->np.array:
     """
         Joins together the normal and anomalous testing data
         
@@ -60,15 +73,8 @@ def _join(hf:h5py.File, anomaly:str, amount:float,field:str)->np.array:
         data: concatenated array
 
     """
-    if anomaly is not None:
-        data = np.concatenate([hf['test_data/{}'.format(field)][:], 
-                               hf['anomaly_data/{}/{}'.format(anomaly,field)]],axis=0)
-#    else: #TODO this is broken when evaluating data
-#        _test = hf['test_data/{}'.format(field)][:]
-#        _indx  = np.random.default_rng(42).choice(len(_test), size=int(len(_test)*amount)) 
-#        data = np.concatenate([_test[_indx], 
-#                              hf['train_data/{}'.format(field)][:]],axis=0)
-#
+    data = np.concatenate([hf['test_data/{}'.format(field)][:], 
+                           hf['anomaly_data/{}/{}'.format(anomaly,field)]],axis=0)
                         
     return data 
 
