@@ -17,7 +17,12 @@ from eval import eval_vae, eval_resnet
 
 def main():
     print(args.model_name)
-    train_dataset, val_dataset, test_dataset = get_data(args)
+    transform = None#transforms.Compose([transforms.RandomResizedCrop(size=(args.patch_size, args.patch_size),
+                #                                                 scale=(0.5, 1.0)),  
+                #                    transforms.RandomHorizontalFlip(p=0.5),
+                #                    transforms.RandomVerticalFlip(p=0.5),
+                #                    ])
+    train_dataset, val_dataset, test_dataset = get_data(args,transform=transform)
 
     train_dataloader = DataLoader(train_dataset,
                                   batch_size=args.batch_size,
@@ -40,17 +45,16 @@ def main():
     elif args.model == 'resnet':
         resnet = ResNet(dim=test_dataset.n_patches**2, in_channels=4)
         resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
-        #resnet.load_state_dict(torch.load('outputs/resnet/lightning/notorious-ancient-lori-of-kindness/resnet.pt'))
+        #resnet.load_state_dict(torch.load(''))
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
     elif args.model == 'position_classifier':
         resnet = ResNet(out_dims=8, 
                         in_channels=4)
-        classifier = PositionClassifier(in_dims=512, 
-                                       out_dims=len(default_frequency_bands[args.patch_size]))
-        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+        classifier = PositionClassifier(in_dims=128, out_dims=len(default_frequency_bands[args.patch_size]))
+        #resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
 
-        #resnet.load_state_dict(torch.load('outputs/position_classifier/cuddly-heavy-binturong-of-gallantry/resnet.pt'))
+        resnet.load_state_dict(torch.load('outputs/position_classifier/poetic-tomato-koala-of-tolerance/resnet.pt'))
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
 if __name__ == '__main__':

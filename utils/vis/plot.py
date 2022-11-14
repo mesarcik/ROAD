@@ -64,17 +64,21 @@ def nln_io(n_plots:int,
     for i in range(0,n_plots*2,2):
         r = np.random.randint(len(x_test))
         axs[i][0].imshow(x_test[r,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
-        axs[i][0].set_title("Input", fonsize=3)
+        axs[i][0].set_title("Input", fontsize=5)
         axs[i][0].axis('off')
         axs[i+1][0].axis('off')
         for n in range(neighbours.shape[0]):
             axs[i][n+1].imshow(neighbours[n,r,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
-            axs[i][n+1].set_title("{}".format(labels[r], fontsize=3))
+            axs[i][n+1].set_title("{}".format(labels[r]), fontsize=5)
             axs[i][n+1].axis('off')
             axs[i+1,n+1].imshow(D[n,r,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
             axs[i+1][n+1].axis('off')
 
-    plt.savefig('{}/{}'.format(path, anomaly),dpi=300)
+    _dir = '{}/training_outputs'.format(path)
+    if not os.path.exists(_dir):
+        os.makedirs(_dir)
+
+    plt.savefig('{}/{}_{}'.format(_dir, anomaly, epoch),dpi=300)
     plt.close('all')
 
 

@@ -188,6 +188,7 @@ def eval_resnet(resnet:ResNet,
                 train_dataloader: DataLoader, 
                 args:args, 
                 plot:bool=True,
+                epoch=100,
                 error:str="nln")->None:
     """
         Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types 
@@ -258,7 +259,7 @@ def eval_resnet(resnet:ResNet,
                     test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                     D,
                     'outputs/{}/{}'.format(args.model, args.model_name),
-                    -1, 
+                    epoch, 
                     anomaly) 
 
             for n in range(1,N+1):
@@ -270,10 +271,15 @@ def eval_resnet(resnet:ResNet,
                                                     anomaly, 
                                                     dists)
 
-                print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(n, auroc, auprc, f1))
+                print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(epoch,
+                                                                                        n,
+                                                                                        auroc,
+                                                                                        auprc,
+                                                                                        f1))
 
                 save_results(args, 
                         anomaly=anomaly,
+                        epoch=epoch,
                         neighbour=n,
                         auroc=auroc, 
                         auprc=auprc, 

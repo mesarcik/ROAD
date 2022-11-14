@@ -11,7 +11,7 @@ from utils import args
 from utils.data.defaults import *
 
 
-def get_data(args, anomaly:str=None):
+def get_data(args, transform=None, anomaly:str=None):
     hf = h5py.File(args.data_path,'r')
 
     (train_data, val_data, 
@@ -28,20 +28,24 @@ def get_data(args, anomaly:str=None):
                                  train_labels, 
                                  train_frequency_band, 
                                  train_source,
-                                 args)
+                                 args,
+                                 transform=transform,
+                                 roll=True)
 
     val_dataset =   LOFARDataset(val_data, 
                                  val_labels, 
                                  val_frequency_band, 
                                  val_source,
-                                 args)
+                                 args,
+                                 transform=None)
 
     if anomaly is None: anomaly = args.anomaly_class
     test_dataset = LOFARDataset(_join(hf, anomaly, 'data'),
                                 _join(hf, anomaly, 'labels').astype(str),
                                 _join(hf, anomaly, 'frequency_band'),
                                 _join(hf, anomaly, 'source').astype(str),
-                                args)
+                                args,
+                                transform=None)
 
     return train_dataset, val_dataset, test_dataset
 
@@ -85,7 +89,23 @@ class LOFARDataset(Dataset):
             frequency_band:np.array, 
             source:np.array, 
             args:args, 
-            sourceTransform=None):# set default types
+            transform=None,
+            roll=False):# set default types
+
+        # A temporary solution to the crop problem:
+        if roll:
+            data = np.concatenate([data, 
+                                  np.roll(data, args.patch_size//2, axis =2),
+                                  np.roll(data, args.patch_size//4, axis =2),
+                                                 ], axis=0)# this is less artihmetically complex then making stride half
+
+            frequency_band = np.concatenate([frequency_band, 
+                                             np.roll(frequency_band, args.patch_size//4, axis =2), 
+                                             np.roll(frequency_band, args.patch_size//4, axis =2)], 
+                                             axis=0)# this is less artihmetically complex then making stride half
+
+            labels= np.concatenate([labels, labels, source], axis=0)
+            source = np.concatenate([source, source, source], axis=0)
 
         self.args = args
         self.source = source
@@ -113,7 +133,7 @@ class LOFARDataset(Dataset):
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
         self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
 
-        self.sourceTransform = sourceTransform
+        self.transform=transform 
 
     def __len__(self):
         return len(self.data)
@@ -130,8 +150,8 @@ class LOFARDataset(Dataset):
         context_image_pivot = self.context_images_pivot[idx]
         context_image_neighbour = self.context_images_neighbour[idx]
 
-        if self.sourceTransform:
-            datum = self.sourceTransform(datum)
+        if self.transform:
+            datum = self.transform(datum)
 
         return datum, label, frequency, station, context_label, context_image_pivot, context_image_neighbour
 
@@ -148,6 +168,12 @@ class LOFARDataset(Dataset):
             encoded_stations: station names encoded between 0-1
 
         """
+        #encoded_frequencies = []
+        #for f in frequency_band:
+        #    _temp = '-'.join((str(f[0]),str(f[1])))
+        #    encoded_frequencies.append(_temp)
+        #print(np.unique(encoded_frequencies))
+
         encoded_frequencies = []
         for f in frequency_band:
             _temp = '-'.join((str(f[0]),str(f[1])))

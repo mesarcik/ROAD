@@ -10,13 +10,13 @@ class PositionClassifier(nn.Module):
 
         self.in_dims = in_dims
         modules  = []
-        modules.append(nn.Linear(in_dims, 128))
+        modules.append(nn.Linear(in_dims, 64))
         modules.append(nn.LeakyReLU(0.1))
 
-        modules.append(nn.Linear(128, 64))
+        modules.append(nn.Linear(64, 32))
         modules.append(nn.LeakyReLU(0.1))
 
-        modules.append(nn.Linear(64, out_dims))
+        modules.append(nn.Linear(32, out_dims))
         modules.append(nn.BatchNorm1d(num_features=out_dims))
 
         self.model = nn.Sequential(*modules)

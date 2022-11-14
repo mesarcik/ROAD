@@ -9,6 +9,7 @@ from torch import nn
 
 from utils.args import args
 from utils.vis import imscatter, io, loss_curve
+from eval import eval_resnet
 
 
 def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
@@ -216,19 +217,15 @@ def train_position_classifier(
                 encoder_optimizer.zero_grad()
                 classifier_optimizer.zero_grad()
 
-                #z0 = resnet(_context_pivot)
-                #z1 = resnet(_context_neighbour)
                 c = resnet(_context_pivot, _context_neighbour)
-                
-
                 resnet_loss = resnet.loss_function(c, _context_label)['loss']
 
-                z0 = resnet.embed(_context_pivot)
+                _z = resnet.embed(_context_pivot)
 
-                c = classifier(z0)
+                c = classifier(_z)
                 classifier_loss = classifier.loss_function(c, _freq)['loss']
 
-                loss =   classifier_loss + resnet_loss  
+                loss =   classifier_loss + resnet_loss + 0.0001*torch.sum(torch.square(_z)) 
 
                 loss.backward()
                 encoder_optimizer.step()
@@ -246,7 +243,7 @@ def train_position_classifier(
                 val_acc_context = torch.sum(
                     c.argmax(
                         dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
-                running_cont += val_acc_context
+                running_acc += val_acc_context
 
                 z0 = resnet.embed(_pivot)
                 c = classifier(z0).cpu().detach()
@@ -254,11 +251,12 @@ def train_position_classifier(
                 val_acc_freq = torch.sum(
                     c.argmax(
                         dim=-1) == val_dataset.frequency_band) / val_dataset.frequency_band.shape[0]
-                running_acc += val_acc_freq
+                running_cont+= val_acc_freq
                 
 
                 tepoch.set_postfix(total_loss=loss.item(), 
                                    encoder_loss=resnet_loss.item(), 
+                                   regularisation=0.0001*torch.sum(torch.square(_z)).cpu().detach().item(),
                                    location_loss=classifier_loss.item(), 
                                    val_acc_freq=val_acc_freq.item(),
                                    val_acc_context=val_acc_context.item())
@@ -270,7 +268,7 @@ def train_position_classifier(
             validation_accuracies.append(running_acc/ total_step)
             context_accuracies.append(running_cont/ total_step)
 
-            if epoch % 20 == 0:  # TODO: check for model improvement
+            if epoch % 10 == 0:  # TODO: check for model improvement
                 # print validation loss
 
                 torch.save(
@@ -287,6 +285,8 @@ def train_position_classifier(
 
 
                 resnet.eval()
+                #eval_resnet(resnet, train_dataloader, args, epoch=epoch,error='nln')
+
                 Z = resnet.embed(_data).cpu().detach().numpy()
                 z = TSNE(n_components=2,
                          learning_rate='auto',
