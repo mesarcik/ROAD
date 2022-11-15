@@ -17,10 +17,10 @@ def get_data(args, transform=None, anomaly:str=None):
     (train_data, val_data, 
     train_labels, val_labels, 
     train_frequency_band, val_frequency_band,
-    train_source, val_source) = train_test_split(_temp_join_test(hf, args.amount,'data'), #hf['train_data/data'][:],#
-                                                 _temp_join_test(hf, args.amount, 'labels').astype(str), #hf['train_data/labels'][:].astype(str),#
-                                                 _temp_join_test(hf, args.amount, 'frequency_band'), #hf['train_data/frequency_band'][:],#
-                                                 _temp_join_test(hf, args.amount, 'source').astype(str), #hf['train_data/source'][:].astype(str),#
+    train_source, val_source) = train_test_split(_temp_join_test(hf, 0,'data'), #hf['train_data/data'][:],#
+                                                 _temp_join_test(hf, 0, 'labels').astype(str), #hf['train_data/labels'][:].astype(str),#
+                                                 _temp_join_test(hf, 0, 'frequency_band'), #hf['train_data/frequency_band'][:],#
+                                                 _temp_join_test(hf, 0, 'source').astype(str), #hf['train_data/source'][:].astype(str),#
                                                  test_size=0.05, 
                                                  random_state=args.seed)
 
@@ -209,24 +209,12 @@ class LOFARDataset(Dataset):
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
             for pol in range(data.shape[-1]):
-                _min, _max = np.percentile(spec[...,pol], [5,95])
+                _min, _max = np.percentile(spec[...,pol], [0,100-self.args.amount])
                 temp = np.clip(spec[...,pol],_min, _max)
                 temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
                 _data[i,...,pol] = temp
         _data = np.nan_to_num(_data, 0)
         return _data
-
-    def plot_spectra(self, data: np.array, loc:str)->None:
-        indxs = np.random.randint(low=0, high= len(self.data), size=16)
-        sq = int(np.sqrt(len(indxs)))
-        fig, axs = plt.subplots(sq, sq, figsize=(10,10))
-        _c = 0
-        for i in range(sq):
-            for j in range(sq):
-                axs[i,j].imshow(data[indxs[_c],...,0], aspect='auto',interpolation='nearest', vmin =0, vmax=1)
-                _c+=1
-        plt.savefig(loc, dpi=300)
-
 
             
     def patch(self, _input:torch.tensor, verbose:bool=False) -> torch.tensor:

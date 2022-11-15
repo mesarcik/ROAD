@@ -52,9 +52,9 @@ def main():
         resnet = ResNet(out_dims=8, 
                         in_channels=4)
         classifier = PositionClassifier(in_dims=128, out_dims=len(default_frequency_bands[args.patch_size]))
-        #resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
 
-        resnet.load_state_dict(torch.load('outputs/position_classifier/poetic-tomato-koala-of-tolerance/resnet.pt'))
+#        resnet.load_state_dict(torch.load('outputs/position_classifier/poetic-tomato-koala-of-tolerance/resnet.pt'))
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
 if __name__ == '__main__':

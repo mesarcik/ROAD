@@ -218,7 +218,7 @@ def eval_resnet(resnet:ResNet,
     z_train = np.vstack(z_train) 
     x_train = np.vstack(x_train) 
 
-    for anomaly in anomalies:
+    for __count__, anomaly in enumerate(anomalies):
         z_test, x_test = [], []
         _, _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
@@ -261,6 +261,16 @@ def eval_resnet(resnet:ResNet,
                     'outputs/{}/{}'.format(args.model, args.model_name),
                     epoch, 
                     anomaly) 
+
+                if __count__ ==0:
+                    nln_io(5, 
+                        x_recon, 
+                        neighbours_recon,
+                        test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
+                        D,
+                        'outputs/{}/{}'.format(args.model, args.model_name),
+                        epoch, 
+                        "") 
 
             for n in range(1,N+1):
                 # build a flat (CPU) index

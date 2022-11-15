@@ -15,6 +15,7 @@ parser.add_argument('-epochs', metavar='-e', type=int, default=100, help = 'The 
 parser.add_argument('-latent_dim', metavar='-ld', type=int, default=2, help = 'The latent dimension size of the AE based models')
 parser.add_argument('-neighbours', metavar='-n', nargs='+',type=int, default=[2,5,10], help = 'The maximum number of neighbours for latent anomaly detection')
 parser.add_argument('-data_path', metavar='-dp', type=str, help = 'Path to training data')
+parser.add_argument('-output_path', metavar='-op', default='outputs/results_LOFAR_AD.csv', type=str, help = 'Output path')
 parser.add_argument('-seed', metavar='-s', type=int, default=42, help = 'The random seed')
 parser.add_argument('-verbose', metavar='-v', type=str, help = 'Verbose output')
 parser.add_argument('-patch_size', metavar='-ps', type=int, default=32, help = 'Dimension of patches')
