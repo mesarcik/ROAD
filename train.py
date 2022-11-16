@@ -225,14 +225,14 @@ def train_position_classifier(
                 c = classifier(_z)
                 classifier_loss = classifier.loss_function(c, _freq)['loss']
 
-                loss =   classifier_loss + resnet_loss + 0.0001*torch.sum(torch.square(_z)) 
+                loss =   classifier_loss + 10*resnet_loss + 0.0001*torch.sum(torch.square(_z)) 
 
                 loss.backward()
                 encoder_optimizer.step()
                 classifier_optimizer.step()
 
                 running_loss += loss.item()
-                encoder_loss += resnet_loss.item()
+                encoder_loss += 10*resnet_loss.item()
                 location_loss += classifier_loss.item()
 
                 _data = val_dataset.data.float().to(args.device)
@@ -255,7 +255,7 @@ def train_position_classifier(
                 
 
                 tepoch.set_postfix(total_loss=loss.item(), 
-                                   encoder_loss=resnet_loss.item(), 
+                                   encoder_loss=10*resnet_loss.item(), 
                                    regularisation=0.0001*torch.sum(torch.square(_z)).cpu().detach().item(),
                                    location_loss=classifier_loss.item(), 
                                    val_acc_freq=val_acc_freq.item(),

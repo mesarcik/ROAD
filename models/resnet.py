@@ -15,12 +15,12 @@ class ResNet(nn.Module):
                                  stride=(2, 2), 
                                  padding=(3, 3), 
                                  bias=False)
-        self.resnet.fc = nn.Linear(512, 128)
+        self.resnet.fc = nn.Linear(512, 64)
         #self.resnet =torch.nn.Sequential(*(list(resnet.children())[:-1]))
 
         # classifier  
         modules  = []
-        modules.append(nn.Linear(256, 64)) # 256 because each input is 128 
+        modules.append(nn.Linear(128, 64)) # 256 because each input is 128 
         modules.append(nn.LeakyReLU(0.1))
 
         modules.append(nn.Linear(64, 32))

@@ -30,7 +30,7 @@ def get_data(args, transform=None, anomaly:str=None):
                                  train_source,
                                  args,
                                  transform=transform,
-                                 roll=True)
+                                 roll=False)
 
     val_dataset =   LOFARDataset(val_data, 
                                  val_labels, 
@@ -209,7 +209,7 @@ class LOFARDataset(Dataset):
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
             for pol in range(data.shape[-1]):
-                _min, _max = np.percentile(spec[...,pol], [0,100-self.args.amount])
+                _min, _max = np.percentile(spec[...,pol], [0,96])
                 temp = np.clip(spec[...,pol],_min, _max)
                 temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
                 _data[i,...,pol] = temp
