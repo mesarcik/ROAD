@@ -9,6 +9,7 @@ import h5py
 
 from utils import args
 from utils.data.defaults import *
+from utils.data.patches import reconstruct
 
 
 def get_data(args, transform=None, anomaly:str=None):
@@ -30,7 +31,7 @@ def get_data(args, transform=None, anomaly:str=None):
                                  train_source,
                                  args,
                                  transform=transform,
-                                 roll=False)
+                                 roll=True)
 
     val_dataset =   LOFARDataset(val_data, 
                                  val_labels, 
@@ -49,6 +50,7 @@ def get_data(args, transform=None, anomaly:str=None):
 
     return train_dataset, val_dataset, test_dataset
 
+
 def _temp_join_test(hf:h5py.File,amount:float ,field:str):
     """
         temp function to evaluate how much data we need to add
@@ -61,7 +63,6 @@ def _temp_join_test(hf:h5py.File,amount:float ,field:str):
                          hf['train_data/{}'.format(field)][:]],axis=0)
     return data
 
-                        
 def _join(hf:h5py.File, anomaly:str, field:str)->np.array:
     """
         Joins together the normal and anomalous testing data
@@ -79,8 +80,10 @@ def _join(hf:h5py.File, anomaly:str, field:str)->np.array:
     """
     data = np.concatenate([hf['test_data/{}'.format(field)][:], 
                            hf['anomaly_data/{}/{}'.format(anomaly,field)]],axis=0)
+    #indx = np.arange(len(data))
+    #indx = np.array([i for i in indx if i not in excluded_sources[anomaly]])
                         
-    return data 
+    return data#[indx]
 
 class LOFARDataset(Dataset):
     def __init__(self, 
@@ -92,20 +95,15 @@ class LOFARDataset(Dataset):
             transform=None,
             roll=False):# set default types
 
-        # A temporary solution to the crop problem:
         if roll:
-            data = np.concatenate([data, 
-                                  np.roll(data, args.patch_size//2, axis =2),
-                                  np.roll(data, args.patch_size//4, axis =2),
-                                                 ], axis=0)# this is less artihmetically complex then making stride half
-
-            frequency_band = np.concatenate([frequency_band, 
-                                             np.roll(frequency_band, args.patch_size//4, axis =2), 
-                                             np.roll(frequency_band, args.patch_size//4, axis =2)], 
-                                             axis=0)# this is less artihmetically complex then making stride half
-
-            labels= np.concatenate([labels, labels, source], axis=0)
-            source = np.concatenate([source, source, source], axis=0)
+            _data, _frequency_band = self.circular_shift(data, 
+                                                       frequency_band, 
+                                                       args.patch_size//4)
+            data = np.concatenate([data, _data],axis=0)
+            frequency_band= np.concatenate([frequency_band, _frequency_band],axis=0)
+            labels = np.concatenate([labels, labels],axis=0)
+            source = np.concatenate([source, source],axis=0)
+            
 
         self.args = args
         self.source = source
@@ -129,6 +127,8 @@ class LOFARDataset(Dataset):
                 self.context_images_pivot, 
                 self.context_images_neighbour) = self.context_prediction(10, args)
 
+        self.jittered_data = self.jitter(args)
+
         self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
         self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
@@ -149,11 +149,44 @@ class LOFARDataset(Dataset):
         context_label = self.context_labels[idx]
         context_image_pivot = self.context_images_pivot[idx]
         context_image_neighbour = self.context_images_neighbour[idx]
+        jittered_datum = self.jittered_data[idx]
 
         if self.transform:
             datum = self.transform(datum)
 
-        return datum, label, frequency, station, context_label, context_image_pivot, context_image_neighbour
+        return datum, label, frequency, station, context_label, context_image_pivot, context_image_neighbour, jittered_datum
+
+    def circular_shift(self,
+                       data:np.array, 
+                       frequency_band:np.array, 
+                       max_roll:int)->(np.array, np.array):
+        """
+            Circular shift to each spectrogram by random amount 
+            
+            Parameters
+            ----------
+            data:  spectrogram data
+            frequency_band:  frequency_band info
+            max_roll: the maximum shift amount 
+
+            Returns
+            -------
+            data: circular shifted data
+            freq: circular shifted frequency information 
+
+        """
+
+        _data =  np.zeros(data.shape)
+        _frequency_band = np.zeros(frequency_band.shape)
+
+        for i in range(len(data)):
+            r = np.random.randint(-max_roll,max_roll)
+            _data[i,:] = np.roll(data[i,:], r, axis =1)
+            _data[i,:] = np.roll(_data[i,:], r, axis =0)
+            _frequency_band[i,:] = np.roll(frequency_band[i,:], r, axis =1)
+            _frequency_band[i,:] = np.roll(_frequency_band[i,:], r, axis =0)
+        
+        return _data, _frequency_band
 
     def encode_frequencies(self, frequency_band:np.array)->np.array:
         """
@@ -177,7 +210,7 @@ class LOFARDataset(Dataset):
         encoded_frequencies = []
         for f in frequency_band:
             _temp = '-'.join((str(f[0]),str(f[1])))
-            encoded_frequencies.append(np.where(np.array(default_frequency_bands[self.args.patch_size]) == _temp)[0][0])
+            encoded_frequencies.append(0)#np.where(np.array(default_frequency_bands[self.args.patch_size]) == _temp)[0][0])
 
         return np.array(encoded_frequencies)
 
@@ -209,8 +242,9 @@ class LOFARDataset(Dataset):
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
             for pol in range(data.shape[-1]):
-                _min, _max = np.percentile(spec[...,pol], [0,96])
+                _min, _max = np.percentile(spec[...,pol], [5,95])
                 temp = np.clip(spec[...,pol],_min, _max)
+#                temp = np.log(temp)
                 temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
                 _data[i,...,pol] = temp
         _data = np.nan_to_num(_data, 0)
@@ -257,20 +291,19 @@ class LOFARDataset(Dataset):
 
         """
 
-        context_labels = np.ones([self.data.shape[0]],dtype='int')*88
+        context_labels = np.ones([self.data.shape[0]],dtype='int')
         context_images_pivot  = np.ones([self.data.shape[0],
-                                          4,
+                                          self.data.shape[1],
                                           args.patch_size, 
                                           args.patch_size],dtype='float32')
         context_images_neighbour = np.zeros([self.data.shape[0],
-                                             4,
+                                             self.data.shape[1],
                                              args.patch_size, 
                                              args.patch_size],dtype='float32')
         _indx = 0
         _locations = [-self.n_patches-1, -self.n_patches, -self.n_patches+1, -1, +1, +self.n_patches-1, +self.n_patches, +self.n_patches+1]
 
         for _image_indx in range(self.n_patches**2, self.data.shape[0]+1,self.n_patches**2):
-            #_patch_indexes = np.random.randint(low=0, high=self.n_patches**2, size=(N,))
             temp_patches = self.data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
 
             for _patch_index in range(self.n_patches**2):
@@ -344,3 +377,102 @@ class LOFARDataset(Dataset):
         context_images_neighbour = torch.from_numpy(context_images_neighbour)
 
         return context_labels, context_images_pivot, context_images_neighbour
+
+    def jitter(self, args:args) -> torch.tensor:
+        """
+            Creates a jittered pair for training  
+            
+            Parameters
+            ----------
+            args: cmd arugments
+
+            Returns
+            -------
+            jittered_data: tensor of patches 
+
+        """
+
+        jittered_data = np.ones([self.data.shape[0],
+                                 self.data.shape[1],
+                                 args.patch_size, 
+                                 args.patch_size],dtype='float32')
+        _indx = 0
+
+        for _image_indx in range(self.n_patches**2, self.data.shape[0]+1,self.n_patches**2):
+            temp_patches = self.data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
+            temp_data = reconstruct(temp_patches, args) # reconstruct to  shape (1,4,256,256)
+
+            _max = args.amount
+
+            for _patch_index in range(self.n_patches**2):
+                x_coor = args.patch_size*(_patch_index%self.n_patches)
+                y_coor = args.patch_size*(_patch_index//self.n_patches)
+
+                if _patch_index < self.n_patches:
+                    # TOPRIGHT 
+                    if _patch_index % self.n_patches == self.n_patches-1:
+                        # x-jitter can only be negative 
+                        x_coor = x_coor + np.random.randint(-_max, 0)
+                        # y-jitter can only be positive
+                        y_coor = y_coor + np.random.randint(0, _max)
+
+                    # TOPLEFT 
+                    elif _patch_index % self.n_patches == 0:
+                        # x-jitter can only be positive 
+                        x_coor = x_coor + np.random.randint(0, _max)
+                        # y-jitter can only be positive
+                        y_coor = y_coor + np.random.randint(0, _max)
+
+                    else: #TOPMIDDLE
+                        # x-jitter can be positive or negative 
+                        x_coor = x_coor + np.random.randint(-_max, _max)
+                        # y-jitter can only be positive
+                        y_coor = y_coor + np.random.randint(0, _max)
+
+                elif _patch_index >= self.n_patches**2 -self.n_patches:
+                    # BOTTOMRIGHT 
+                    if _patch_index % self.n_patches == self.n_patches-1:
+                        # x-jitter can only be negative 
+                        x_coor = x_coor + np.random.randint(-_max,0)
+                        # y-jitter can only be negative 
+                        y_coor = y_coor + np.random.randint( -_max,0)
+
+                    # BOTTOMLEFT 
+                    elif _patch_index % self.n_patches == 0:
+                        # x-jitter can only be positive 
+                        x_coor = x_coor + np.random.randint(0,_max)
+                        # y-jitter can only be negative 
+                        y_coor = y_coor + np.random.randint( -_max,0)
+
+                    else: #BOTTOMMIDDLE
+                        # x-jitter can be positive or negative 
+                        x_coor = x_coor + np.random.randint(-_max,_max)
+                        # y-jitter can only be negative 
+                        y_coor = y_coor + np.random.randint( -_max,0)
+
+
+                elif _patch_index % self.n_patches == self.n_patches-1: #RIGHT
+                    # x-jitter can only be negative 
+                    x_coor = x_coor + np.random.randint(-_max,0)
+                    # y-jitter can be positive or negative 
+                    y_coor = y_coor + np.random.randint( -_max,_max)
+
+                elif _patch_index % self.n_patches == 0: #LEFT
+                    # x-jitter can only be positive
+                    x_coor = x_coor + np.random.randint(0,_max)
+                    # y-jitter can be positive or negative 
+                    y_coor = y_coor + np.random.randint( -_max,_max)
+                
+                else: #MIDDEL
+                    # x-jitter can be positive or negative
+                    x_coor = x_coor + np.random.randint(-_max,_max)
+                    # y-jitter can be positive or negative 
+                    y_coor = y_coor + np.random.randint( -_max,_max)
+
+                jittered_data[_indx,:] = temp_data[0,
+                                                   :,
+                                                   y_coor:y_coor+args.patch_size,
+                                                   x_coor:x_coor+args.patch_size]
+                _indx +=1
+
+        return torch.from_numpy(jittered_data)

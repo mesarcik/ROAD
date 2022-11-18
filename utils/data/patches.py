@@ -25,7 +25,7 @@ def reconstruct_distances(distances:np.array, args:args):
     dists_recon = reconstruct(np.expand_dims(dists,axis=1),args)
     return dists_recon
 
-def reconstruct(data:np.array, args:args, verbose:bool=False) -> torch.tensor:
+def reconstruct(data, args:args, verbose:bool=False) -> torch.tensor:
     """
         Used to convert patches dataset into original dimenions
         Fixed to 4 channels with original shape of 256
@@ -41,9 +41,11 @@ def reconstruct(data:np.array, args:args, verbose:bool=False) -> torch.tensor:
         data : tensor of reconstructed patches
 
     """
+    assert (type(data) == np.ndarray or type(data) == torch.Tensor), "Data must be either numpy array or torch Tensor"
     assert len(data.shape) == 4, "Data shape must be in form (N,...,C)"
-    data = torch.from_numpy(data)
 
+    if type(data) == np.ndarray:
+        data = torch.from_numpy(data)
 
     n_patches = 256//args.patch_size # only for square patches 
     N_orig = data.shape[0]//n_patches**2

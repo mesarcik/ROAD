@@ -209,7 +209,7 @@ def eval_resnet(resnet:ResNet,
     resnet.eval()
     
     z_train, x_train = [],[]
-    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
+    for _data, _target, _freq, _station, _context,_,_,_ in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -225,7 +225,7 @@ def eval_resnet(resnet:ResNet,
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq, _station, _context,_,_ in test_dataloader:
+        for _data, _target, _freq, _station, _context,_,_,_ in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
@@ -262,15 +262,15 @@ def eval_resnet(resnet:ResNet,
                     epoch, 
                     anomaly) 
 
-                if __count__ ==0:
-                    nln_io(5, 
-                        x_recon, 
-                        neighbours_recon,
-                        test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
-                        D,
-                        'outputs/{}/{}'.format(args.model, args.model_name),
-                        epoch, 
-                        "") 
+                #if __count__ ==0:
+                #    nln_io(5, 
+                #        x_recon, 
+                #        neighbours_recon,
+                #        test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
+                #        D,
+                #        'outputs/{}/{}'.format(args.model, args.model_name),
+                #        epoch, 
+                #        "") 
 
             for n in range(1,N+1):
                 # build a flat (CPU) index

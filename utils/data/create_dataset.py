@@ -80,7 +80,7 @@ def create_dataset()->None:
     test_group = hf.create_group('test_data')
     anomalies_group = hf.create_group('anomaly_data')
 
-    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_12-10-22.pkl', 'rb') as f:
+    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_16-11-22.pkl', 'rb') as f:
         data, labels, source, ids, frequency_band = cPickle.load(f,encoding='latin')
   
     data, labels, source, ids, frequency_band  = remove_singles(data, 

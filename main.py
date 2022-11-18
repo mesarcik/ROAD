@@ -10,7 +10,7 @@ from utils.data.defaults import default_stations, default_frequency_bands
 import os
 
 from data import get_data
-from models import VAE, ResNet, PositionClassifier
+from models import VAE, ResNet, PositionClassifier, Decoder
 from train import train_vae, train_resnet, train_position_classifier
 from eval import eval_vae, eval_resnet
 
@@ -49,13 +49,12 @@ def main():
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
     elif args.model == 'position_classifier':
-        resnet = ResNet(out_dims=8, 
-                        in_channels=4)
-        classifier = PositionClassifier(in_dims=64, out_dims=len(default_frequency_bands[args.patch_size]))
-        #resnet.load_state_dict(torch.load('outputs/position_classifier/swinging-placid-newt-of-karma/resnet.pt'))
-        #classifier.load_state_dict(torch.load('outputs/position_classifier/swinging-placid-newt-of-karma/classifier.pt'))
-        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+        resnet = ResNet(out_dims=8,in_channels=4, latent_dim=args.latent_dim)
+        classifier = PositionClassifier(in_dims=128, out_dims=len(default_frequency_bands[args.patch_size]))
 
+        #resnet.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/resnet.pt'))
+        #classifier.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/classifier.pt'))
+        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
         eval_resnet(resnet, train_dataloader, args, error='nln')
 
 if __name__ == '__main__':

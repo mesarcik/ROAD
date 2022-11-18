@@ -65,23 +65,27 @@ def nln_io(n_plots:int,
     if not os.path.exists(_dir):
         os.makedirs(_dir)
 
-    for i in tqdm(range(len(x_test))):
-        if anomaly in labels[i]: 
-            fig,axs = plt.subplots(2,neighbours.shape[0]+1,figsize=(10,5));
-            axs[0][0].imshow(x_test[i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
-            axs[0][0].set_title("Input", fontsize=5)
-            axs[0][0].axis('off')
-            axs[1][0].axis('off')
-            for n in range(neighbours.shape[0]):
-                axs[0][n+1].imshow(neighbours[n,i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
-                axs[0][n+1].set_title("{}".format(labels[i]), fontsize=5)
-                axs[0][n+1].axis('off')
-                axs[1][n+1].imshow(D[n,i,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
-                axs[1][n+1].set_title("{}".format(round(np.mean(D[n,i,...]),3)), fontsize=5)
-                axs[1][n+1].axis('off')
+    for _ in tqdm(range(10)):
+        i = np.random.randint(len(x_test))
 
-            plt.savefig('{}/{}_{}'.format(_dir, anomaly, i),dpi=96)
-            plt.close('all')
+        while anomaly not in labels[i]:
+            i = np.random.randint(len(x_test))
+
+        fig,axs = plt.subplots(2,neighbours.shape[0]+1,figsize=(10,5));
+        axs[0][0].imshow(x_test[i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+        axs[0][0].set_title("Input", fontsize=5)
+        axs[0][0].axis('off')
+        axs[1][0].axis('off')
+        for n in range(neighbours.shape[0]):
+            axs[0][n+1].imshow(neighbours[n,i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+            axs[0][n+1].set_title("{}".format(labels[i]), fontsize=5)
+            axs[0][n+1].axis('off')
+            axs[1][n+1].imshow(D[n,i,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+            axs[1][n+1].set_title("{}".format(round(np.mean(D[n,i,...]),3)), fontsize=5)
+            axs[1][n+1].axis('off')
+
+        plt.savefig('{}/{}_{}'.format(_dir, anomaly, i),dpi=96)
+        plt.close('all')
 
 
 def loss_curve(path:str,epoch:int, **kwargs)->None:
