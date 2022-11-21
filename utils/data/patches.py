@@ -22,10 +22,10 @@ def reconstruct_distances(distances:np.array, args:args):
                                                                 args.patch_size, 
                                                                 args.patch_size)
 
-    dists_recon = reconstruct(np.expand_dims(dists,axis=-1),args)
+    dists_recon = reconstruct(np.expand_dims(dists,axis=1),args)
     return dists_recon
 
-def reconstruct(data:np.array, args:args, verbose:bool=False) -> torch.tensor:
+def reconstruct(data, args:args, verbose:bool=False) -> torch.tensor:
     """
         Used to convert patches dataset into original dimenions
         Fixed to 4 channels with original shape of 256
@@ -41,16 +41,18 @@ def reconstruct(data:np.array, args:args, verbose:bool=False) -> torch.tensor:
         data : tensor of reconstructed patches
 
     """
+    assert (type(data) == np.ndarray or type(data) == torch.Tensor), "Data must be either numpy array or torch Tensor"
     assert len(data.shape) == 4, "Data shape must be in form (N,...,C)"
-    data = torch.from_numpy(data)
 
+    if type(data) == np.ndarray:
+        data = torch.from_numpy(data)
 
     n_patches = 256//args.patch_size # only for square patches 
     N_orig = data.shape[0]//n_patches**2
-    unfold_shape = (N_orig, n_patches, n_patches, 4, args.patch_size, args.patch_size)
+    unfold_shape = (N_orig, n_patches, n_patches, data.shape[1], args.patch_size, args.patch_size)
     
-    data = data.view(unfold_shape)
-    data = data.permute(0, 3, 1, 4, 2, 5).contiguous()
-    data = data.view([N_orig, 4, 256, 256])
+    _data = data.view(unfold_shape)
+    _data = _data.permute(0, 3, 1, 4, 2, 5).contiguous()
+    _data = _data.view([N_orig, data.shape[1], 256, 256])
 
-    return data
+    return _data

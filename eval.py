@@ -1,13 +1,15 @@
 import torch
 import faiss
-from torch.utils.data import DataLoader
-from models import VAE
-from utils import args
 import numpy as np
-from sklearn.metrics import roc_curve,precision_recall_curve, auc
+from torch.utils.data import DataLoader
+from models import VAE, ResNet
+from utils import args
+from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
+from utils.vis import io, nln_io
 from data import get_data
-import pkg_resources
+from utils.data import anomalies 
+from utils.data.patches import reconstruct, reconstruct_distances
 
 def nln(z_test:np.array, 
         z_train:np.array, 
@@ -34,28 +36,19 @@ def nln(z_test:np.array,
         dists: distance to neighbours 
         indx: indices of z_train that correspond to the neighbours 
     """
-    #TODO: fix faiss gpu installation
-    gpu = False
 
-    try:
-        _installed = pkg_resources.get_distribution('faiss-gpu')
-        gpu=True
-    except Exception as e:
-        pass
-    finally:
-        index_flat = faiss.IndexFlatL2(z_train.shape[-1])
+    index_flat = faiss.IndexFlatL2(z_train.shape[-1])
 
-        if gpu:
-            res = faiss.StandardGpuResources()
-            index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
-        
-        index_flat.add(z_train.astype('float32'))         # add vectors to the index
-        D, I = index_flat.search(z_test.astype('float32'), N)  # actual search
-        
-        if x_hat is not None:
-            return x_hat[I], D, I
-        else:
-            return D, I
+    res = faiss.StandardGpuResources()
+    index_flat = faiss.index_cpu_to_gpu(res, 0, index_flat)
+    
+    index_flat.add(z_train.astype('float32'))         # add vectors to the index
+    D, I = index_flat.search(z_test.astype('float32'), N)  # actual search
+    
+    if x_hat is not None:
+        return x_hat[I], D, I
+    else:
+        return D, I
 
 def integrate(error:np.array, test_dims: tuple, args:args)->np.array:
     """
@@ -98,7 +91,7 @@ def compute_metrics(labels:np.array, anomaly:str, pred:np.array)->(float, float,
     """
     assert len(labels) == len(pred), "The length of predictions != length of labels"
 
-    _ground_truth = [l == anomaly for l in labels]
+    _ground_truth = [anomaly in l for l in labels]
 
     fpr,tpr, thr = roc_curve(_ground_truth, pred)
     auroc = auc(fpr, tpr)
@@ -132,7 +125,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     
     z_train = []
     x_hat_train = []
-    for _data, _target, _freq in train_dataloader:
+    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
         _data = _data.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -141,15 +134,15 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
     z_train = np.vstack(z_train) 
     x_hat_train = np.vstack(x_hat_train)
 
-    for anomaly in ['oscillating_tile', 'electric_fence','data_loss', 'lightning','strong_radio_emitter']:
+    for anomaly in anomalies:
         z_test= []
         x_hat_test = []
-        _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
+        _, _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq in test_dataloader:
+        for _data, _target, _freq, _station, _context, _, _ in test_dataloader:
             _data = _data.float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -160,9 +153,9 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
         if error == 'nln':
             for N in args.neighbours:
                 # build a flat (CPU) index
-                neighbours, D, I = nln(z_test, z_train, N, args, x_hat=x_hat_train)
+                D, I = nln(z_test, z_train, N, args)
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                                                     anomaly, 
                                                     dists)
 
@@ -178,7 +171,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
         elif error == 'recon':
             error = (x_hat_test - test_dataloader.dataset.data.numpy())**2
             error = integrate(error, test_dataloader.dataset.original_shape, args)
-            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                                                 anomaly, 
                                                 error)
 
@@ -191,7 +184,12 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
                     auprc=auprc, 
                     f1_score=f1)
 
-def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln")->None:
+def eval_resnet(resnet:ResNet, 
+                train_dataloader: DataLoader, 
+                args:args, 
+                plot:bool=True,
+                epoch=100,
+                error:str="nln")->None:
     """
         Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types 
         and writes them to file
@@ -210,41 +208,89 @@ def eval_resnet(resnet, train_dataloader: DataLoader, args:args, error:str="nln"
     resnet.to(args.device)
     resnet.eval()
     
-    z_train = []
-    for _data, _target,_freq in train_dataloader:
+    z_train, x_train = [],[]
+    for _data, _target, _freq, _station, _context,_,_,_ in train_dataloader:
         _data = _data.float().to(args.device)
-        z = resnet(_data)
+        z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
+        x_train.append(_data.cpu().detach().numpy())
 
     z_train = np.vstack(z_train) 
+    x_train = np.vstack(x_train) 
 
-    for anomaly in ['oscillating_tile', 'electric_fence','data_loss', 'lightning','strong_radio_emitter']:
-        z_test= []
-        _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
+    for __count__, anomaly in enumerate(anomalies):
+        z_test, x_test = [], []
+        _, _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
         test_dataloader = DataLoader(test_dataset, 
                 batch_size=args.batch_size, 
                 shuffle=False)
 
-        for _data, _target, _freq in test_dataloader:
+        for _data, _target, _freq, _station, _context,_,_,_ in test_dataloader:
             _data = _data.float().to(args.device)
-            z = resnet(_data)
+            z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
-        z_test = np.vstack(z_test)
+            x_test.append(_data.cpu().detach().numpy())
+        z_test, x_test = np.vstack(z_test), np.vstack(x_test)
+
+        if plot:
+            x_recon = reconstruct(x_test, args)
 
         if error == 'nln':
-            for N in args.neighbours:
+            N = int(np.max(args.neighbours))
+            _D, _I = nln(z_test, z_train, N, args)
+
+            if plot:
+                neighbours = x_train[_I]
+                neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
+                                            for i in range(neighbours.shape[1])])
+                D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(256//args.patch_size)**2 ,
+                                                          int(256//args.patch_size),
+                                                          int(256//args.patch_size))
+                                        for i in range(neighbours.shape[1])])
+
+                _min, _max = np.percentile(D, [1,99])
+                D = np.clip(D,_min, _max)
+                D = ((D - D.min()) / (D.max() - D.min()))
+
+
+                nln_io(5, 
+                    x_recon, 
+                    neighbours_recon,
+                    test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
+                    D,
+                    'outputs/{}/{}'.format(args.model, args.model_name),
+                    epoch, 
+                    anomaly) 
+
+                #if __count__ ==0:
+                #    nln_io(5, 
+                #        x_recon, 
+                #        neighbours_recon,
+                #        test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
+                #        D,
+                #        'outputs/{}/{}'.format(args.model, args.model_name),
+                #        epoch, 
+                #        "") 
+
+            for n in range(1,N+1):
                 # build a flat (CPU) index
-                D, I = nln(z_test, z_train, N, args)
+                D,I = _D[:,:n], _I[:,:n]
                 dists = integrate(D, test_dataloader.dataset.original_shape, args)
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, 
+
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
                                                     anomaly, 
                                                     dists)
 
-                print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1))
+                print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(epoch,
+                                                                                        n,
+                                                                                        auroc,
+                                                                                        auprc,
+                                                                                        f1))
 
                 save_results(args, 
                         anomaly=anomaly,
-                        neighbour=N,
+                        epoch=epoch,
+                        neighbour=n,
                         auroc=auroc, 
                         auprc=auprc, 
                         f1_score=f1)
