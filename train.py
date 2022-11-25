@@ -230,10 +230,10 @@ def train_position_classifier(
                 classifier_loss = torch.Tensor([0.0])#classifier.loss_function(c, _freq)['loss']
 
                 _z0 = resnet.embed(_jittered)
-                embedding_loss = 100*mse(_z, _z0)
+                embedding_loss = torch.Tensor([0.0])#100*mse(_z, _z0)
                 
 
-                loss =   resnet_loss + embedding_loss+ 0.00001*torch.sum(torch.square(_z))#classifier_loss +  
+                loss =   resnet_loss #+ 0.00001*torch.sum(torch.square(_z))#classifier_loss +  
 
                 loss.backward()
                 encoder_optimizer.step()
