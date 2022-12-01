@@ -37,6 +37,8 @@ def nln(z_test:np.array,
         indx: indices of z_train that correspond to the neighbours 
     """
 
+    torch.cuda.empty_cache() 
+
     index_flat = faiss.IndexFlatL2(z_train.shape[-1])
 
     res = faiss.StandardGpuResources()

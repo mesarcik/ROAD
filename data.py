@@ -242,8 +242,8 @@ class LOFARDataset(Dataset):
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
             for pol in range(data.shape[-1]):
-                #_min, _max = np.percentile(spec[...,pol], [self.args.amount,100-self.args.amount])
-                temp = spec[...,pol]#np.clip(spec[...,pol],_min, _max)
+                _min, _max = np.percentile(spec[...,pol], [self.args.amount,100-self.args.amount])
+                temp = np.clip(spec[...,pol],_min, _max)
                 temp = np.log(temp)
                 temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
                 _data[i,...,pol] = temp
@@ -402,7 +402,7 @@ class LOFARDataset(Dataset):
             temp_patches = self.data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
             temp_data = reconstruct(temp_patches, args) # reconstruct to  shape (1,4,256,256)
 
-            _max = 1#args.amount
+            _max = args.amount
 
             for _patch_index in range(self.n_patches**2):
                 x_coor = args.patch_size*(_patch_index%self.n_patches)
