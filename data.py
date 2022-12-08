@@ -12,16 +12,16 @@ from utils.data.defaults import *
 from utils.data.patches import reconstruct
 
 
-def get_data(args, transform=None, anomaly:str=None):
+def get_data(args, transform=None):
     hf = h5py.File(args.data_path,'r')
 
     (train_data, val_data, 
     train_labels, val_labels, 
     train_frequency_band, val_frequency_band,
-    train_source, val_source) = train_test_split(_temp_join_test(hf, 0,'data'), #hf['train_data/data'][:],#
-                                                 _temp_join_test(hf, 0, 'labels').astype(str), #hf['train_data/labels'][:].astype(str),#
-                                                 _temp_join_test(hf, 0, 'frequency_band'), #hf['train_data/frequency_band'][:],#
-                                                 _temp_join_test(hf, 0, 'source').astype(str), #hf['train_data/source'][:].astype(str),#
+    train_source, val_source) = train_test_split(hf['train_data/data'][:],
+                                                 hf['train_data/labels'][:].astype(str),
+                                                 hf['train_data/frequency_band'][:],
+                                                 hf['train_data/source'][:].astype(str),
                                                  test_size=0.05, 
                                                  random_state=args.seed)
 
@@ -40,37 +40,22 @@ def get_data(args, transform=None, anomaly:str=None):
                                  args,
                                  transform=None)
 
-    if anomaly is None: anomaly = args.anomaly_class
-    test_dataset = LOFARDataset(_join(hf, anomaly, 'data'),
-                                _join(hf, anomaly, 'labels').astype(str),
-                                _join(hf, anomaly, 'frequency_band'),
-                                _join(hf, anomaly, 'source').astype(str),
+    test_dataset = LOFARDataset(_join(hf, 'data'),
+                                _join(hf, 'labels').astype(str),
+                                _join(hf, 'frequency_band'),
+                                _join(hf, 'source').astype(str),
                                 args,
                                 transform=None)
 
     return train_dataset, val_dataset, test_dataset
 
-
-def _temp_join_test(hf:h5py.File,amount:float ,field:str):
-    """
-        temp function to evaluate how much data we need to add
-
-    """
-
-    _test = hf['test_data/{}'.format(field)][:]
-    _indx  = np.random.default_rng(42).choice(len(_test), size=int(len(_test)*amount)) 
-    data = np.concatenate([_test[_indx], 
-                         hf['train_data/{}'.format(field)][:]],axis=0)
-    return data
-
-def _join(hf:h5py.File, anomaly:str, field:str)->np.array:
+def _join(hf:h5py.File, field:str)->np.array:
     """
         Joins together the normal and anomalous testing data
         
         Parameters
         ----------
         hf: h5py dataset 
-        anomaly: anomalous class
         field: the field that is meant to be concatenated along 
 
         Returns
@@ -78,12 +63,12 @@ def _join(hf:h5py.File, anomaly:str, field:str)->np.array:
         data: concatenated array
 
     """
-    data = np.concatenate([hf['test_data/{}'.format(field)][:], 
-                           hf['anomaly_data/{}/{}'.format(anomaly,field)]],axis=0)
-    #indx = np.arange(len(data))
-    #indx = np.array([i for i in indx if i not in excluded_sources[anomaly]])
-                        
-    return data#[indx]
+    data = hf['test_data/{}'.format(field)][:]
+    for a in anomalies:
+        _data = hf['anomaly_data/{}/{}'.format(a,field)]
+        data = np.concatenate([data,
+                               _data],axis=0)
+    return data
 
 class LOFARDataset(Dataset):
     def __init__(self, 
@@ -106,34 +91,30 @@ class LOFARDataset(Dataset):
             
 
         self.args = args
-        self.source = source
-        self.n_patches = int(256/args.patch_size)
+        self.anomaly_mask = []
+        self._source = source
+        self.n_patches = int(SIZE[0]/args.patch_size)
+        self._labels= np.repeat(labels, self.n_patches**2, axis=0)
 
-        self.labels= np.repeat(labels, self.n_patches**2, axis=0)
+        self._stations = self.encode_stations(source)
+        self._stations = torch.from_numpy(np.repeat(self._stations, self.n_patches**2, axis=0))
 
-        self.stations = self.encode_stations(source)
-        self.stations = torch.from_numpy(np.repeat(self.stations, self.n_patches**2, axis=0))
-
-        # Need to flatten all polarisations
         data = self.normalise(data)
+        self._data = torch.from_numpy(data).permute(0,3,1,2)
+        self._data = self.patch(self._data)
 
-        _t = data.shape
-        self.original_shape = [_t[0], _t[3], _t[2], _t[1]] # change to be [N,C,...]
+        (self._context_labels, 
+         self._context_images_pivot, 
+         self._context_images_neighbour) = self.context_prediction(10, args)
 
-        self.data = torch.from_numpy(data).permute(0,3,1,2)
-        self.data = self.patch(self.data)
+        self._jittered_data = self.jitter(args)
 
-        (self.context_labels, 
-                self.context_images_pivot, 
-                self.context_images_neighbour) = self.context_prediction(10, args)
-
-        self.jittered_data = self.jitter(args)
-
-        self.frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
-        self.frequency_band = self.patch(self.frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-        self.frequency_band = torch.from_numpy(self.encode_frequencies(self.frequency_band.numpy()))
+        self._frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
+        self._frequency_band = self.patch(self._frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
+        self._frequency_band = torch.from_numpy(self.encode_frequencies(self._frequency_band.numpy()))
 
         self.transform=transform 
+        self.set_anomaly_mask('all')
 
     def __len__(self):
         return len(self.data)
@@ -155,6 +136,32 @@ class LOFARDataset(Dataset):
             datum = self.transform(datum)
 
         return datum, label, frequency, station, context_label, context_image_pivot, context_image_neighbour, jittered_datum
+
+    def set_anomaly_mask(self, anomaly:str):
+        """
+            Sets the mask for the dataloader to load only specific classes 
+            
+            Parameters
+            ----------
+            anomaly: anomaly class for mask 
+
+            Returns
+            -------
+            None 
+        """
+        if anomaly == 'all':
+            self.anomaly_mask = [True]*len(self._data)
+        else:
+            self.anomaly_mask = [((anomaly in l) | (l == '')) for l in self._labels]
+
+        self.data = self._data[self.anomaly_mask]
+        self.labels = self._labels[self.anomaly_mask]
+        self.frequency_band = self._frequency_band[self.anomaly_mask]
+        self.stations = self._stations[self.anomaly_mask]
+        self.context_labels = self._context_labels[self.anomaly_mask]
+        self.context_images_pivot = self._context_images_pivot[self.anomaly_mask]
+        self.context_images_neighbour = self._context_images_neighbour[self.anomaly_mask]
+        self.jittered_data = self._jittered_data[self.anomaly_mask]
 
     def circular_shift(self,
                        data:np.array, 
@@ -249,7 +256,6 @@ class LOFARDataset(Dataset):
                 _data[i,...,pol] = temp
         _data = np.nan_to_num(_data, 0)
         return _data
-
             
     def patch(self, _input:torch.tensor, verbose:bool=False) -> torch.tensor:
         """
@@ -291,20 +297,20 @@ class LOFARDataset(Dataset):
 
         """
 
-        context_labels = np.ones([self.data.shape[0]],dtype='int')
-        context_images_pivot  = np.ones([self.data.shape[0],
-                                          self.data.shape[1],
+        context_labels = np.ones([self._data.shape[0]],dtype='int')
+        context_images_pivot  = np.ones([self._data.shape[0],
+                                          self._data.shape[1],
                                           args.patch_size, 
                                           args.patch_size],dtype='float32')
-        context_images_neighbour = np.zeros([self.data.shape[0],
-                                             self.data.shape[1],
+        context_images_neighbour = np.zeros([self._data.shape[0],
+                                             self._data.shape[1],
                                              args.patch_size, 
                                              args.patch_size],dtype='float32')
         _indx = 0
         _locations = [-self.n_patches-1, -self.n_patches, -self.n_patches+1, -1, +1, +self.n_patches-1, +self.n_patches, +self.n_patches+1]
 
-        for _image_indx in range(self.n_patches**2, self.data.shape[0]+1,self.n_patches**2):
-            temp_patches = self.data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
+        for _image_indx in range(self.n_patches**2, self._data.shape[0]+1,self.n_patches**2):
+            temp_patches = self._data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
 
             for _patch_index in range(self.n_patches**2):
                 if _patch_index < self.n_patches:
@@ -392,14 +398,14 @@ class LOFARDataset(Dataset):
 
         """
 
-        jittered_data = np.ones([self.data.shape[0],
-                                 self.data.shape[1],
+        jittered_data = np.ones([self._data.shape[0],
+                                 self._data.shape[1],
                                  args.patch_size, 
                                  args.patch_size],dtype='float32')
         _indx = 0
 
-        for _image_indx in range(self.n_patches**2, self.data.shape[0]+1,self.n_patches**2):
-            temp_patches = self.data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
+        for _image_indx in range(self.n_patches**2, self._data.shape[0]+1,self.n_patches**2):
+            temp_patches = self._data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
             temp_data = reconstruct(temp_patches, args) # reconstruct to  shape (1,4,256,256)
 
             _max = args.amount

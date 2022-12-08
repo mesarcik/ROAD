@@ -68,7 +68,7 @@ def nln_io(n_plots:int,
     for _ in tqdm(range(10)):
         i = np.random.randint(len(x_test))
 
-        while anomaly not in labels[i]:
+        while labels[i] == '':
             i = np.random.randint(len(x_test))
 
         fig,axs = plt.subplots(2,neighbours.shape[0]+1,figsize=(10,5));

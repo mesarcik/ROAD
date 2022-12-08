@@ -1,6 +1,7 @@
 import torch
 import faiss
 import numpy as np
+import gc
 from torch.utils.data import DataLoader
 from models import VAE, ResNet
 from utils import args
@@ -8,7 +9,7 @@ from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
 from utils.vis import io, nln_io
 from data import get_data
-from utils.data import anomalies 
+from utils.data import anomalies, SIZE
 from utils.data.patches import reconstruct, reconstruct_distances
 
 def nln(z_test:np.array, 
@@ -52,14 +53,13 @@ def nln(z_test:np.array,
     else:
         return D, I
 
-def integrate(error:np.array, test_dims: tuple, args:args)->np.array:
+def integrate(error:np.array, args:args)->np.array:
     """
         Reassembles the error vectors to the same resolution as the input
 
         Parameters
         ----------
         error: error metric
-        test_dims: dimensions of test data
         args: utils.args
 
         Returns
@@ -68,21 +68,20 @@ def integrate(error:np.array, test_dims: tuple, args:args)->np.array:
 
     """
     dists = np.mean(error, axis = tuple(range(1,error.ndim)))
-    n_patches = int(256//args.patch_size)
-    dists = dists.reshape(test_dims[0], 
+    n_patches = int(SIZE[0]//args.patch_size)
+    dists = dists.reshape(len(error[::n_patches**2]),
             n_patches,
             n_patches)
     dists = np.mean(dists, axis = tuple(range(1,dists.ndim)))
     return dists
 
-def compute_metrics(labels:np.array, anomaly:str, pred:np.array)->(float, float, float):
+def compute_metrics(labels:np.array, pred:np.array)->(float, float, float):
     """
         Computes AUROC, AUPRC and F1 for integrated data
 
         Parameters
         ----------
         labels: labels from dataset
-        anomaly: anomalous class
         pred: the integrated prediction from model
 
         Returns
@@ -93,7 +92,7 @@ def compute_metrics(labels:np.array, anomaly:str, pred:np.array)->(float, float,
     """
     assert len(labels) == len(pred), "The length of predictions != length of labels"
 
-    _ground_truth = [anomaly in l for l in labels]
+    _ground_truth = [l != '' for l in labels]
 
     fpr,tpr, thr = roc_curve(_ground_truth, pred)
     auroc = auc(fpr, tpr)
@@ -106,7 +105,11 @@ def compute_metrics(labels:np.array, anomaly:str, pred:np.array)->(float, float,
 
     return (auroc,auprc,f1_score)
 
-def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")->None:
+def eval_vae(vae:VAE, 
+            train_dataloader: DataLoader, 
+            test_dataloader: DataLoader,
+            args:args, 
+            error:str="nln")->None:
     """
         Computes AUROC, AUPRC and F1 for VAE for multiple calculation types 
         and writes them to file
@@ -115,6 +118,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
         ----------
         vae: trained VAE on the cpu
         train_dataloader: Dataloader for the training data
+        test_dataloader: Dataloader for the training data
         args: args
         error: calculation method used for VAE ~ ('nln','recon')
 
@@ -135,14 +139,13 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
 
     z_train = np.vstack(z_train) 
     x_hat_train = np.vstack(x_hat_train)
-
+    
+    anomalies.append('all')
     for anomaly in anomalies:
+        gc.collect()
         z_test= []
         x_hat_test = []
-        _, _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
-        test_dataloader = DataLoader(test_dataset, 
-                batch_size=args.batch_size, 
-                shuffle=False)
+        test_dataloader.dataset.set_anomaly_mask(anomaly)
 
         for _data, _target, _freq, _station, _context, _, _ in test_dataloader:
             _data = _data.float().to(args.device)
@@ -156,9 +159,8 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
             for N in args.neighbours:
                 # build a flat (CPU) index
                 D, I = nln(z_test, z_train, N, args)
-                dists = integrate(D, test_dataloader.dataset.original_shape, args)
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
-                                                    anomaly, 
+                dists = integrate(D, args)
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
                                                     dists)
 
                 print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1))
@@ -172,9 +174,8 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
 
         elif error == 'recon':
             error = (x_hat_test - test_dataloader.dataset.data.numpy())**2
-            error = integrate(error, test_dataloader.dataset.original_shape, args)
-            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
-                                                anomaly, 
+            error = integrate(error, args)
+            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
                                                 error)
 
             print("AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(auroc, auprc, f1))
@@ -188,6 +189,7 @@ def eval_vae(vae:VAE, train_dataloader: DataLoader, args:args, error:str="nln")-
 
 def eval_resnet(resnet:ResNet, 
                 train_dataloader: DataLoader, 
+                test_dataloader: DataLoader, 
                 args:args, 
                 plot:bool=True,
                 epoch=100,
@@ -200,6 +202,7 @@ def eval_resnet(resnet:ResNet,
         ----------
         resnet : trained Resnet on the cpu
         train_dataloader: Dataloader for the training data
+        test_dataloader: Dataloader for the test data
         args: args
         error: calculation method used for Resnet ~ ('nln')
 
@@ -220,12 +223,11 @@ def eval_resnet(resnet:ResNet,
     z_train = np.vstack(z_train) 
     x_train = np.vstack(x_train) 
 
+    anomalies.append('all')
     for __count__, anomaly in enumerate(anomalies):
+        gc.collect()
         z_test, x_test = [], []
-        _, _, test_dataset = get_data(args,anomaly=anomaly)# TODO make this more elegant
-        test_dataloader = DataLoader(test_dataset, 
-                batch_size=args.batch_size, 
-                shuffle=False)
+        test_dataloader.dataset.set_anomaly_mask(anomaly)
 
         for _data, _target, _freq, _station, _context,_,_,_ in test_dataloader:
             _data = _data.float().to(args.device)
@@ -245,9 +247,9 @@ def eval_resnet(resnet:ResNet,
                 neighbours = x_train[_I]
                 neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
                                             for i in range(neighbours.shape[1])])
-                D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(256//args.patch_size)**2 ,
-                                                          int(256//args.patch_size),
-                                                          int(256//args.patch_size))
+                D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(SIZE[0]//args.patch_size)**2 ,
+                                                          int(SIZE[0]//args.patch_size),
+                                                          int(SIZE[0]//args.patch_size))
                                         for i in range(neighbours.shape[1])])
 
                 _min, _max = np.percentile(D, [1,99])
@@ -258,29 +260,18 @@ def eval_resnet(resnet:ResNet,
                 nln_io(5, 
                     x_recon, 
                     neighbours_recon,
-                    test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
+                    test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
                     D,
                     'outputs/{}/{}'.format(args.model, args.model_name),
                     epoch, 
                     anomaly) 
 
-                #if __count__ ==0:
-                #    nln_io(5, 
-                #        x_recon, 
-                #        neighbours_recon,
-                #        test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
-                #        D,
-                #        'outputs/{}/{}'.format(args.model, args.model_name),
-                #        epoch, 
-                #        "") 
-
             for n in range(1,N+1):
                 # build a flat (CPU) index
                 D,I = _D[:,:n], _I[:,:n]
-                dists = integrate(D, test_dataloader.dataset.original_shape, args)
+                dists = integrate(D,  args)
 
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(256//args.patch_size)**2], 
-                                                    anomaly, 
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
                                                     dists)
 
                 print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(epoch,

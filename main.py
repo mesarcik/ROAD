@@ -40,13 +40,13 @@ def main():
         vae = train_vae(train_dataloader, vae, args)
         # TODO Add eval/train state
         #vae.load_state_dict(torch.load('outputs/vae/lightning/big-khaki-jackal-of-inquire/vae.pt'))
-        eval_vae(vae, train_dataloader, args, error='nln')
+        eval_vae(vae, train_dataloader, test_dataloader, args, error='nln')
 
     elif args.model == 'resnet':
         resnet = ResNet(dim=test_dataset.n_patches**2, in_channels=4)
         resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
         #resnet.load_state_dict(torch.load(''))
-        eval_resnet(resnet, train_dataloader, args, error='nln')
+        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
 
     elif args.model == 'position_classifier':
         resnet = ResNet(out_dims=8,in_channels=4, latent_dim=args.latent_dim)
@@ -54,8 +54,8 @@ def main():
 
         #resnet.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/resnet.pt'))
         #classifier.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/classifier.pt'))
-        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
-        eval_resnet(resnet, train_dataloader, args, error='nln')
+        #resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
 
 if __name__ == '__main__':
     main()
