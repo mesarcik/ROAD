@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import math
 
 class PositionClassifier(nn.Module):
-    def __init__(self, in_dims:int, out_dims:int, class_num=8):
+    def __init__(self, in_dims:int, out_dims:int):
         super().__init__()
 
         self.in_dims = in_dims

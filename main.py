@@ -50,7 +50,7 @@ def main():
 
     elif args.model == 'position_classifier':
         resnet = ResNet(out_dims=8,in_channels=4, latent_dim=args.latent_dim)
-        classifier = PositionClassifier(in_dims=128, out_dims=len(default_frequency_bands[args.patch_size]))
+        classifier = PositionClassifier(in_dims=128, out_dims=1)#len(default_frequency_bands[args.patch_size]))
 
         #resnet.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/resnet.pt'))
         #classifier.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/classifier.pt'))
