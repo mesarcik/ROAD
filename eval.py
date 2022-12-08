@@ -248,8 +248,8 @@ def eval_resnet(resnet:ResNet,
                 neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
                                             for i in range(neighbours.shape[1])])
                 D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(SIZE[0]//args.patch_size)**2 ,
-                                                          int(SIZE[0]//args.patch_size),
-                                                          int(SIZE[0]//args.patch_size))
+                                                           int(SIZE[0]//args.patch_size),
+                                                           int(SIZE[0]//args.patch_size))
                                         for i in range(neighbours.shape[1])])
 
                 _min, _max = np.percentile(D, [1,99])
