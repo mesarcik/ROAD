@@ -38,24 +38,25 @@ def main():
                   patch_size=args.patch_size,
                   hidden_dims=args.hidden_dims)
         vae = train_vae(train_dataloader, vae, args)
-        # TODO Add eval/train state
-        #vae.load_state_dict(torch.load('outputs/vae/lightning/big-khaki-jackal-of-inquire/vae.pt'))
-        eval_vae(vae, train_dataloader, args, error='nln')
+        if args.load_model:
+            vae.load_state_dict(torch.load('outputs/vae/{}/vae.pt'.format(args.model_name)))
+        eval_vae(vae, train_dataloader, test_dataloader, args, error='nln')
 
     elif args.model == 'resnet':
         resnet = ResNet(dim=test_dataset.n_patches**2, in_channels=4)
         resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
-        #resnet.load_state_dict(torch.load(''))
-        eval_resnet(resnet, train_dataloader, args, error='nln')
+        if args.load_model:
+            resnet.load_state_dict(torch.load('outputs/resnet/{}/resnet.pt'.format(args.model_name)))
+        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
 
     elif args.model == 'position_classifier':
         resnet = ResNet(out_dims=8,in_channels=4, latent_dim=args.latent_dim)
         classifier = PositionClassifier(in_dims=128, out_dims=1)#len(default_frequency_bands[args.patch_size]))
-
-        #resnet.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/resnet.pt'))
-        #classifier.load_state_dict(torch.load('outputs/position_classifier/dynamic-tanuki-of-massive-will/classifier.pt'))
+        if args.load_model:
+            resnet.load_state_dict(torch.load('outputs/position_classifier/{}/resnet.pt'.format(args.model_name)))
+            classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))
         resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
-        eval_resnet(resnet, train_dataloader, args, error='nln')
+        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
 
 if __name__ == '__main__':
     main()

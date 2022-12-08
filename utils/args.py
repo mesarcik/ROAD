@@ -24,10 +24,16 @@ parser.add_argument('-learning_rate', metavar='-lr', type=float, default=1e-3, h
 parser.add_argument('-hidden_dims', metavar='-hd', nargs='+',type=int, default=[32,64,128,256], help = 'Hidden dims for VAE')
 parser.add_argument('-percentage_anomalies', metavar='-pa', type=float, default=0.1, help = 'Percentage of anomalies')
 parser.add_argument('-amount', metavar='-am', type=float, default=0.1, help = 'Amount of test data')
+parser.add_argument('-model_name', metavar='-mn', type=str, default=None, help = 'Model name for loading')
 
 args = parser.parse_args()
 
-args.model_name = new_name()
+if args.model_name is None: 
+    args.model_name = new_name()
+    args.load_model = False
+else: 
+    args.load_model = True
+
 args.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 torch.manual_seed(args.seed)
