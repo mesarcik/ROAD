@@ -131,7 +131,7 @@ def eval_vae(vae:VAE,
     
     z_train = []
     x_hat_train = []
-    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
+    for _data, _target, _freq, _station, _context,_ in train_dataloader:
         _data = _data.float().to(args.device)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -147,7 +147,7 @@ def eval_vae(vae:VAE,
         x_hat_test = []
         test_dataloader.dataset.set_anomaly_mask(anomaly)
 
-        for _data, _target, _freq, _station, _context, _, _ in test_dataloader:
+        for _data, _target, _freq, _station, _context, _ in test_dataloader:
             _data = _data.float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
@@ -214,7 +214,7 @@ def eval_resnet(resnet:ResNet,
     resnet.eval()
     
     z_train, x_train = [],[]
-    for _data, _target, _freq, _station, _context,_,_,_ in train_dataloader:
+    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -229,7 +229,7 @@ def eval_resnet(resnet:ResNet,
         z_test, x_test = [], []
         test_dataloader.dataset.set_anomaly_mask(anomaly)
 
-        for _data, _target, _freq, _station, _context,_,_,_ in test_dataloader:
+        for _data, _target, _freq, _station, _context,_,_ in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())

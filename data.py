@@ -104,7 +104,6 @@ class LOFARDataset(Dataset):
         self._data = self.patch(self._data)
 
         (self._context_labels, 
-         self._context_images_pivot, 
          self._context_images_neighbour) = self.context_prediction(10, args)
 
         self._jittered_data = self.jitter(args)
@@ -128,14 +127,13 @@ class LOFARDataset(Dataset):
         frequency = self.frequency_band[idx] 
         station = self.stations[idx]
         context_label = self.context_labels[idx]
-        context_image_pivot = self.context_images_pivot[idx]
         context_image_neighbour = self.context_images_neighbour[idx]
         jittered_datum = self.jittered_data[idx]
 
         if self.transform:
             datum = self.transform(datum)
 
-        return datum, label, frequency, station, context_label, context_image_pivot, context_image_neighbour, jittered_datum
+        return datum, label, frequency, station, context_label, context_image_neighbour, jittered_datum
 
     def set_anomaly_mask(self, anomaly:str):
         """
@@ -159,7 +157,6 @@ class LOFARDataset(Dataset):
         self.frequency_band = self._frequency_band[self.anomaly_mask]
         self.stations = self._stations[self.anomaly_mask]
         self.context_labels = self._context_labels[self.anomaly_mask]
-        self.context_images_pivot = self._context_images_pivot[self.anomaly_mask]
         self.context_images_neighbour = self._context_images_neighbour[self.anomaly_mask]
         self.jittered_data = self._jittered_data[self.anomaly_mask]
 
@@ -298,10 +295,6 @@ class LOFARDataset(Dataset):
         """
 
         context_labels = np.ones([self._data.shape[0]],dtype='int')
-        context_images_pivot  = np.ones([self._data.shape[0],
-                                          self._data.shape[1],
-                                          args.patch_size, 
-                                          args.patch_size],dtype='float32')
         context_images_neighbour = np.zeros([self._data.shape[0],
                                              self._data.shape[1],
                                              args.patch_size, 
@@ -375,14 +368,12 @@ class LOFARDataset(Dataset):
                     #[-self.n_patches-1, -self.n_patches, -self.n_patches+1]
                     #[-1               ,       X        ,                 1]
                     #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
-                context_images_pivot[_indx,:] = temp_patches[_patch_index]   
                 context_images_neighbour[_indx,:] = temp_patches[_patch_index + _locations[context_labels[_indx]]]
                 _indx +=1
         context_labels = torch.from_numpy(context_labels)
-        context_images_pivot = torch.from_numpy(context_images_pivot)
         context_images_neighbour = torch.from_numpy(context_images_neighbour)
 
-        return context_labels, context_images_pivot, context_images_neighbour
+        return context_labels, context_images_neighbour
 
     def jitter(self, args:args) -> torch.tensor:
         """

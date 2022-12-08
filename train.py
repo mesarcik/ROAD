@@ -42,7 +42,7 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
-            for _data, _target, _freq, _station, _context, _,_ in tepoch:
+            for _data, _target, _freq, _station, _context, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
                 optimizer.zero_grad()
@@ -209,10 +209,10 @@ def train_position_classifier(
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss, encoder_loss, location_loss, jitter_loss  = 0.0, 0.0, 0.0, 0.0
             running_acc, running_cont = 0.0, 0.0
-            for _, _target, _freq, _station, _context_label, _context_pivot, _context_neighbour, _jittered in tepoch:
+            for _data, _target, _freq, _station, _context_label, _context_neighbour, _jittered in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
 
-                _context_pivot = _context_pivot.float().to(args.device)
+                _data = _data.float().to(args.device)
                 _context_neighbour = _context_neighbour.float().to(args.device)
                 #_freq = _freq.to(args.device)
                 _context_label= _context_label.to(args.device)
@@ -221,10 +221,10 @@ def train_position_classifier(
                 encoder_optimizer.zero_grad()
                 classifier_optimizer.zero_grad()
 
-                c = resnet(_context_pivot, _context_neighbour)
+                c = resnet(_data, _context_neighbour)
                 resnet_loss = resnet.loss_function(c, _context_label)['loss']
 
-                _z = resnet.embed(_context_pivot)
+                _z = resnet.embed(_data)
 
                 #c = classifier(_z)
                 classifier_loss = torch.Tensor([0.0])#classifier.loss_function(c, _freq)['loss']
@@ -245,16 +245,15 @@ def train_position_classifier(
                 jitter_loss += embedding_loss.item()
 
                 _data = val_dataset.data.float().to(args.device)
-                _pivot = val_dataset.context_images_pivot.float().to(args.device)
                 _neighbour = val_dataset.context_images_neighbour.float().to(args.device)
 
-                c = resnet(_pivot, _neighbour).cpu().detach()
+                c = resnet(_data, _neighbour).cpu().detach()
                 val_acc_context = torch.sum(
                     c.argmax(
                         dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
                 running_acc += val_acc_context
 
-                #z0 = resnet.embed(_pivot)
+                #z0 = resnet.embed(_data)
                 #c = classifier(z0).cpu().detach()
 
                 val_acc_freq = torch.Tensor([0.0])#torch.sum(
