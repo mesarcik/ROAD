@@ -327,7 +327,8 @@ def eval_finetune(resnet:ResNet,
         _z = resnet.embed(_data)
         _z = _z.view(_z.shape[0]//(SIZE[0]//args.patch_size)**2,
                         ((SIZE[0]//args.patch_size)**2)*args.latent_dim)
-        c = classification_head(_z).argmax(dim=-1).cpu().detach()
+        c = classification_head(_z)
+        c = c.argmax(dim=-1).cpu().detach()
         target = _target[::(SIZE[0]//args.patch_size)**2].cpu().detach()
 
         predictions.extend(c.numpy().flatten())
@@ -336,39 +337,35 @@ def eval_finetune(resnet:ResNet,
     predictions, targets = np.array(predictions), np.array(targets)
     # For the null class
     encoding = len(anomalies)
-    auroc, auprc, f1, acc = compute_metrics(targets,predictions==encoding, normal_class=True)
-    print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}, Accuracy: {:.4f}".format(anomaly,
+    auroc, auprc, f1 = compute_metrics(targets,predictions==encoding, normal_class=True)
+    print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format('normal',
                                                                                   epoch,
                                                                                   auroc,
                                                                                   auprc,
-                                                                                  f1,
-                                                                                  acc))
+                                                                                  f1))
 
     save_results(args,
-        anomaly=anomaly,
+        anomaly='normal',
         epoch=epoch,
         neighbour=-1,
         auroc=auroc,
         auprc=auprc,
-        f1_score=f1,
-        accuracy=acc)
+        f1_score=f1)
 
     for encoding, anomaly in enumerate(anomalies):
 
-        auroc, auprc, f1, acc = compute_metrics(targets,
+        auroc, auprc, f1 = compute_metrics(targets,
                                            predictions==encoding)
 
-        print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}, Accuracy: {:.4f}".format(anomaly,
+        print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(anomaly,
                                                                                       epoch,
                                                                                       auroc,
                                                                                       auprc,
-                                                                                      f1,
-                                                                                      acc))
+                                                                                      f1))
         save_results(args,
             anomaly=anomaly,
             epoch=epoch,
             neighbour=-1,
             auroc=auroc,
             auprc=auprc,
-            f1_score=f1,
-            accuracy=acc)
+            f1_score=f1)

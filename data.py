@@ -29,14 +29,16 @@ def get_finetune_data(args, transform=None):
                                  train_source,
                                  args,
                                  transform=transform,
-                                 roll=True)
+                                 roll=True,
+                                 fine_tune=True)
 
     test_dataset =   LOFARDataset(test_data,
                                  test_labels,
                                  test_frequency_band,
                                  test_source,
                                  args,
-                                 transform=None)
+                                 transform=None,
+                                 fine_tune=True)
 
     return train_dataset, test_dataset
 
@@ -124,8 +126,12 @@ class LOFARDataset(Dataset):
         self._source = source
         self.n_patches = int(defaults.SIZE[0]/args.patch_size)
 
-        if fine_tune: labels = self.encode_labels(labels)
-        self._labels= np.repeat(labels, self.n_patches**2, axis=0)
+        if fine_tune: 
+            self._labels = self.encode_labels(labels)
+            self._labels= np.repeat(self._labels, self.n_patches**2, axis=0)
+            self._labels = torch.from_numpy(self._labels)
+        else:
+            self._labels= np.repeat(labels, self.n_patches**2, axis=0)
 
         self._stations = self.encode_stations(source)
         self._stations = torch.from_numpy(np.repeat(self._stations, self.n_patches**2, axis=0))

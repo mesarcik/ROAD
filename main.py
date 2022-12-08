@@ -6,13 +6,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from utils.vis import imscatter
 from utils.args import args
-from utils.data.defaults import default_stations, default_frequency_bands, SIZE
+from utils.data.defaults import anomalies, default_stations, default_frequency_bands, SIZE
 import os
 
 from data import get_data, get_finetune_data
 from models import VAE, ResNet, PositionClassifier, Decoder, ClassificationHead
 from train import train_vae, train_resnet, train_position_classifier
 from eval import eval_vae, eval_resnet, eval_finetune
+from fine_tune import fine_tune
 
 
 def main():
@@ -55,16 +56,25 @@ def main():
         if args.load_model:
             resnet.load_state_dict(torch.load('outputs/position_classifier/{}/resnet.pt'.format(args.model_name)))
             classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))
-        #resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
-        #eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
+        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
 
         if args.fine_tune:
             train_dataset, test_dataset = get_finetune_data(args,transform=transform)
+            train_dataloader = DataLoader(train_dataset,
+                                          batch_size=args.batch_size,
+                                          shuffle=False)
+        
+            test_dataloader = DataLoader(test_dataset,
+                                         batch_size=args.batch_size,
+                                         shuffle=False)
             classification_head = ClassificationHead(out_dims=len(anomalies)+1,
                                                      hidden_dims=[args.latent_dim*(SIZE[0]//(args.patch_size))**2,
                                                      int(0.25*args.latent_dim*(SIZE[0]//(args.patch_size))**2),
                                                      int(0.0625*args.latent_dim*(SIZE[0]//(args.patch_size))**2)])
             classification_head = fine_tune(train_dataloader, test_dataloader, resnet, classification_head, args)
+            if args.load_model:
+                classification_head.load_state_dict(torch.load('outputs/position_classifier/{}/classification_head.pt'.format(args.model_name)))
             eval_finetune(resnet, classification_head, test_dataloader, args, args.epochs)
 
 
