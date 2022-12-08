@@ -3,7 +3,7 @@ import faiss
 import numpy as np
 import gc
 from torch.utils.data import DataLoader
-from models import VAE, ResNet
+from models import VAE, ResNet, ClassificationHead
 from utils import args
 from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
@@ -75,7 +75,7 @@ def integrate(error:np.array, args:args)->np.array:
     dists = np.mean(dists, axis = tuple(range(1,dists.ndim)))
     return dists
 
-def compute_metrics(labels:np.array, pred:np.array)->(float, float, float):
+def compute_metrics(labels:np.array, pred:np.array, normal_class=False)->(float, float, float):
     """
         Computes AUROC, AUPRC and F1 for integrated data
 
@@ -83,6 +83,7 @@ def compute_metrics(labels:np.array, pred:np.array)->(float, float, float):
         ----------
         labels: labels from dataset
         pred: the integrated prediction from model
+        normal_class: indicates if we are tying to detect the normal class
 
         Returns
         -------
@@ -92,7 +93,10 @@ def compute_metrics(labels:np.array, pred:np.array)->(float, float, float):
     """
     assert len(labels) == len(pred), "The length of predictions != length of labels"
 
-    _ground_truth = [l != '' for l in labels]
+    if normal_class:
+        _ground_truth = [l == '' for l in labels]
+    else:
+        _ground_truth = [l != '' for l in labels]
 
     fpr,tpr, thr = roc_curve(_ground_truth, pred)
     auroc = auc(fpr, tpr)
@@ -287,3 +291,84 @@ def eval_resnet(resnet:ResNet,
                         auroc=auroc, 
                         auprc=auprc, 
                         f1_score=f1)
+def eval_finetune(resnet:ResNet,
+                  classification_head:ClassificationHead,
+                  test_dataloader: DataLoader,
+                  args,
+                  epoch:int=-1,
+                  plot:bool=True)->None:
+    """
+        Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types
+        and writes them to file
+
+        Parameters
+        ----------
+        resnet : trained Resnet on the cpu
+        classification_head: multiclass classifier
+        train_dataloader: Dataloader for the training data
+        args: args
+        error: calculation method used for Resnet ~ ('nln')
+
+        Returns
+        -------
+        None
+    """
+    resnet.to(args.device)
+    resnet.eval()
+    classification_head.to(args.device)
+    classification_head.eval()
+
+    predictions, targets  = [], []
+
+    for _data, _target, _, _, _, _, _ in test_dataloader:
+        _target = _target.type(torch.LongTensor).to(args.device)
+        _data = _data.type(torch.FloatTensor).to(args.device)
+
+        _z = resnet.embed(_data)
+        _z = _z.view(_z.shape[0]//(SIZE[0]//args.patch_size)**2,
+                        ((SIZE[0]//args.patch_size)**2)*args.latent_dim)
+        c = classification_head(_z).argmax(dim=-1).cpu().detach()
+        target = _target[::(SIZE[0]//args.patch_size)**2].cpu().detach()
+
+        predictions.extend(c.numpy().flatten())
+        targets.extend(target.numpy().flatten())
+
+    predictions, targets = np.array(predictions), np.array(targets)
+    # For the null class
+    encoding = len(anomalies)
+    auroc, auprc, f1, acc = compute_metrics(targets,predictions==encoding, normal_class=True)
+    print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}, Accuracy: {:.4f}".format(anomaly,
+                                                                                  epoch,
+                                                                                  auroc,
+                                                                                  auprc,
+                                                                                  f1,
+                                                                                  acc))
+
+    save_results(args,
+        anomaly=anomaly,
+        epoch=epoch,
+        neighbour=-1,
+        auroc=auroc,
+        auprc=auprc,
+        f1_score=f1,
+        accuracy=acc)
+
+    for encoding, anomaly in enumerate(anomalies):
+
+        auroc, auprc, f1, acc = compute_metrics(targets,
+                                           predictions==encoding)
+
+        print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}, Accuracy: {:.4f}".format(anomaly,
+                                                                                      epoch,
+                                                                                      auroc,
+                                                                                      auprc,
+                                                                                      f1,
+                                                                                      acc))
+        save_results(args,
+            anomaly=anomaly,
+            epoch=epoch,
+            neighbour=-1,
+            auroc=auroc,
+            auprc=auprc,
+            f1_score=f1,
+            accuracy=acc)

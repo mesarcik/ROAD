@@ -25,6 +25,7 @@ parser.add_argument('-hidden_dims', metavar='-hd', nargs='+',type=int, default=[
 parser.add_argument('-percentage_anomalies', metavar='-pa', type=float, default=0.1, help = 'Percentage of anomalies')
 parser.add_argument('-amount', metavar='-am', type=float, default=0.1, help = 'Amount of test data')
 parser.add_argument('-model_name', metavar='-mn', type=str, default=None, help = 'Model name for loading')
+parser.add_argument('-fine_tune', metavar='-ft', type=bool, default=True, help = 'Use pretrained models for finetuning')
 
 args = parser.parse_args()
 
