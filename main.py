@@ -57,7 +57,7 @@ def main():
         if args.load_model:
             resnet.load_state_dict(torch.load('outputs/position_classifier/{}/resnet.pt'.format(args.model_name)))
             classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))
-        #resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+        resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
         eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
 
         if args.fine_tune:
@@ -79,8 +79,8 @@ def main():
                                                      int(0.25*args.latent_dim*(defaults.SIZE[0]//(args.patch_size))**2),
                                                      int(0.0625*args.latent_dim*(defaults.SIZE[0]//(args.patch_size))**2)])
             classification_head = fine_tune(train_dataloader, test_dataloader, resnet, classification_head, args)
-            #if args.load_model:
-            #    classification_head.load_state_dict(torch.load('outputs/position_classifier/{}/classification_head.pt'.format(args.model_name)))
+            if args.load_model:
+                classification_head.load_state_dict(torch.load('outputs/position_classifier/{}/classification_head.pt'.format(args.model_name)))
             eval_finetune(resnet, classification_head, test_dataloader, args, args.epochs)
 
 
