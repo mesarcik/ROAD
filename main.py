@@ -8,6 +8,7 @@ from utils.vis import imscatter
 from utils.args import args
 from utils.data import defaults
 import os
+import gc
 
 from data import get_data, get_finetune_data
 from models import VAE, ResNet, PositionClassifier, Decoder, ClassificationHead
@@ -57,9 +58,14 @@ def main():
             resnet.load_state_dict(torch.load('outputs/position_classifier/{}/resnet.pt'.format(args.model_name)))
             classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))
         #resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
-        #eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
+        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
 
         if args.fine_tune:
+            del train_dataset 
+            del train_dataloader
+            del test_dataset
+            del test_dataloader
+            gc.collect()
             train_dataset, test_dataset = get_finetune_data(args,transform=transform)
             train_dataloader = DataLoader(train_dataset,
                                           batch_size=args.batch_size,
