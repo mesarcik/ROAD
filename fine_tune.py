@@ -49,7 +49,7 @@ def fine_tune(
     total_step = len(train_dataloader)
 
 
-    for epoch in range(1, 21):
+    for epoch in range(1, 31):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
             running_acc = 0.0
@@ -100,4 +100,4 @@ def fine_tune(
                        total_loss=total_train_loss,
                        train_accuracies=accuracies)
 
-    return resnet
+    return classification_head 

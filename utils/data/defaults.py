@@ -2,7 +2,7 @@ SIZE = (256, 256)
 anomalies = [
     'oscillating_tile',
     'real_high_noise',
-    'electric_fence',
+    #'electric_fence',
     'data_loss',
     'lightning',
     'strong_radio_emitter',

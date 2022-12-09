@@ -75,7 +75,7 @@ def integrate(error:np.array, args:args)->np.array:
     dists = np.mean(dists, axis = tuple(range(1,dists.ndim)))
     return dists
 
-def compute_metrics(labels:np.array, pred:np.array, normal_class=False)->(float, float, float):
+def compute_metrics(labels:np.array, pred:np.array, anomaly:int=0, multiclass=False)->(float, float, float):
     """
         Computes AUROC, AUPRC and F1 for integrated data
 
@@ -83,7 +83,8 @@ def compute_metrics(labels:np.array, pred:np.array, normal_class=False)->(float,
         ----------
         labels: labels from dataset
         pred: the integrated prediction from model
-        normal_class: indicates if we are tying to detect the normal class
+        multiclass: indicates if we are doing multiclass classifcation
+        anomaly: used for multiclass classifcation
 
         Returns
         -------
@@ -93,8 +94,8 @@ def compute_metrics(labels:np.array, pred:np.array, normal_class=False)->(float,
     """
     assert len(labels) == len(pred), "The length of predictions != length of labels"
 
-    if normal_class:
-        _ground_truth = [l == '' for l in labels]
+    if multiclass:
+        _ground_truth = [l == anomaly for l in labels]
     else:
         _ground_truth = [l != '' for l in labels]
 
@@ -337,7 +338,10 @@ def eval_finetune(resnet:ResNet,
     predictions, targets = np.array(predictions), np.array(targets)
     # For the null class
     encoding = len(anomalies)
-    auroc, auprc, f1 = compute_metrics(targets,predictions==encoding, normal_class=True)
+    auroc, auprc, f1 = compute_metrics(targets,
+                                       predictions==encoding, 
+                                       anomaly=encoding, 
+                                       multiclass=True)
     print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format('normal',
                                                                                   epoch,
                                                                                   auroc,
@@ -355,7 +359,9 @@ def eval_finetune(resnet:ResNet,
     for encoding, anomaly in enumerate(anomalies):
 
         auroc, auprc, f1 = compute_metrics(targets,
-                                           predictions==encoding)
+                                           predictions==encoding,
+                                           anomaly=encoding,
+                                           multiclass=True)
 
         print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(anomaly,
                                                                                       epoch,

@@ -95,9 +95,10 @@ def _join(hf:h5py.File, field:str)->np.array:
     """
     data = hf['test_data/{}'.format(field)][:]
     for a in defaults.anomalies:
-        _data = hf['anomaly_data/{}/{}'.format(a,field)]
-        data = np.concatenate([data,
-                               _data],axis=0)
+        if a != 'all':
+            _data = hf['anomaly_data/{}/{}'.format(a,field)]
+            data = np.concatenate([data,
+                                   _data],axis=0)
     return data
 
 class LOFARDataset(Dataset):

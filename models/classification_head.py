@@ -25,9 +25,8 @@ class ClassificationHead(nn.Module):
         self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, 
-                input: torch.tensor,
-                **kwargs):
-        c = self.classifier(input)
+                _input: torch.tensor):
+        c = self.classifier(_input)
         return c
 
     def loss_function(self,
