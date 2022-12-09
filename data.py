@@ -8,9 +8,39 @@ from sklearn.model_selection import train_test_split
 import h5py 
 
 from utils import args
-from utils.data.defaults import *
+from utils.data import defaults
 from utils.data.patches import reconstruct
 
+def get_finetune_data(args, transform=None):
+    hf = h5py.File(args.data_path,'r')
+
+    (test_data, train_data,
+    test_labels, train_labels,
+    test_frequency_band, train_frequency_band,
+    test_source, train_source) = train_test_split(_join(hf, 'data'),
+                                                  _join(hf, 'labels').astype(str),
+                                                  _join(hf, 'frequency_band'),
+                                                  _join(hf, 'source').astype(str),
+                                                  test_size=0.3,
+                                                  random_state=args.seed)
+    train_dataset = LOFARDataset(train_data,
+                                 train_labels,
+                                 train_frequency_band,
+                                 train_source,
+                                 args,
+                                 transform=transform,
+                                 roll=True,
+                                 fine_tune=True)
+
+    test_dataset =   LOFARDataset(test_data,
+                                 test_labels,
+                                 test_frequency_band,
+                                 test_source,
+                                 args,
+                                 transform=None,
+                                 fine_tune=True)
+
+    return train_dataset, test_dataset
 
 def get_data(args, transform=None):
     hf = h5py.File(args.data_path,'r')
@@ -64,10 +94,11 @@ def _join(hf:h5py.File, field:str)->np.array:
 
     """
     data = hf['test_data/{}'.format(field)][:]
-    for a in anomalies:
-        _data = hf['anomaly_data/{}/{}'.format(a,field)]
-        data = np.concatenate([data,
-                               _data],axis=0)
+    for a in defaults.anomalies:
+        if a != 'all':
+            _data = hf['anomaly_data/{}/{}'.format(a,field)]
+            data = np.concatenate([data,
+                                   _data],axis=0)
     return data
 
 class LOFARDataset(Dataset):
@@ -78,7 +109,8 @@ class LOFARDataset(Dataset):
             source:np.array, 
             args:args, 
             transform=None,
-            roll=False):# set default types
+            roll=False,
+            fine_tune=False):# set default types
 
         if roll:
             _data, _frequency_band = self.circular_shift(data, 
@@ -93,8 +125,14 @@ class LOFARDataset(Dataset):
         self.args = args
         self.anomaly_mask = []
         self._source = source
-        self.n_patches = int(SIZE[0]/args.patch_size)
-        self._labels= np.repeat(labels, self.n_patches**2, axis=0)
+        self.n_patches = int(defaults.SIZE[0]/args.patch_size)
+
+        if fine_tune: 
+            self._labels = self.encode_labels(labels)
+            self._labels= np.repeat(self._labels, self.n_patches**2, axis=0)
+            self._labels = torch.from_numpy(self._labels)
+        else:
+            self._labels= np.repeat(labels, self.n_patches**2, axis=0)
 
         self._stations = self.encode_stations(source)
         self._stations = torch.from_numpy(np.repeat(self._stations, self.n_patches**2, axis=0))
@@ -192,6 +230,15 @@ class LOFARDataset(Dataset):
         
         return _data, _frequency_band
 
+    def encode_labels(sef, labels):
+        _labels = []
+        for label in labels:
+            if label =='':
+                _labels.append(len(defaults.anomalies))
+            else:
+                _labels.append([i for i,a in enumerate(defaults.anomalies) if a in label][0])
+        return _labels
+
     def encode_frequencies(self, frequency_band:np.array)->np.array:
         """
             Extracts stations from source feild of dataset and encodes 
@@ -234,7 +281,7 @@ class LOFARDataset(Dataset):
         stations = np.array([s.split('_')[2] for s in sources])
         #_u = np.unique(stations)
         #mapping  = np.linspace(0, 1, len(_u))
-        encoded_stations = np.array([np.where(np.array(default_stations) == s)[0][0] for s in stations]) 
+        encoded_stations = np.array([np.where(np.array(defaults.default_stations) == s)[0][0] for s in stations]) 
         #encoded_stations = mapping[indexes]
         return encoded_stations
 

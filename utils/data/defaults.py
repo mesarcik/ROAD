@@ -2,7 +2,7 @@ SIZE = (256, 256)
 anomalies = [
     'oscillating_tile',
     'real_high_noise',
-    'electric_fence',
+    #'electric_fence',
     'data_loss',
     'lightning',
     'strong_radio_emitter',
@@ -263,9 +263,3 @@ default_frequency_bands = {
        '71968080.0-36039732.0', '73233030.0-15727234.0',
        '74751280.0-38822936.0', '74946590.0-39018250.0',
        '79190060.0-18705750.0', '9960938.0-21684266.0']}
-excluded_sources = {
-        'oscillating_tile':[1208, 1210, 1215, 1216, 1217, 1218, 1219, 1221, 1231, 1233, 1236, 1237, 1244, 1250, 1256, 1269, 1275, 1276 ],
-        'data_loss': [1413, ],
-        'lightning':[1206, 1207, 1207, 1209, 1210, 1211, 1212, 1213, 1214, 1215, 1216, 1217, 1218, 1219, 1220, ],# Need to relabel.
-        'strong_radio_emitter':[],# TOO many
-        'solar_storm':[]}
