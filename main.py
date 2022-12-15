@@ -53,7 +53,7 @@ def main():
 
     elif args.model == 'position_classifier':
         resnet = ResNet(out_dims=8,in_channels=4, latent_dim=args.latent_dim)
-        classifier = PositionClassifier(in_dims=128, out_dims=1)#len(defaults.default_frequency_bands[args.patch_size]))
+        classifier = PositionClassifier(in_dims=2*args.latent_dim, out_dims=3)
         if args.load_model:
             resnet.load_state_dict(torch.load('outputs/position_classifier/{}/resnet.pt'.format(args.model_name)))
             classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))

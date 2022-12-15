@@ -54,11 +54,12 @@ def get_data(args, transform=None):
                                                  hf['train_data/source'][:].astype(str),
                                                  test_size=0.05, 
                                                  random_state=args.seed)
-
-    train_dataset = LOFARDataset(train_data, 
-                                 train_labels, 
-                                 train_frequency_band, 
-                                 train_source,
+    mask = np.random.choice(np.arange(len(train_labels)),
+                             int(len(train_labels)*args.percentage_data))
+    train_dataset = LOFARDataset(train_data[mask], 
+                                 train_labels[mask], 
+                                 train_frequency_band[mask], 
+                                 train_source[mask],
                                  args,
                                  transform=transform,
                                  roll=True)
@@ -95,10 +96,11 @@ def _join(hf:h5py.File, field:str)->np.array:
     """
     data = hf['test_data/{}'.format(field)][:]
     for a in defaults.anomalies:
-        if a != 'all':
-            _data = hf['anomaly_data/{}/{}'.format(a,field)]
+        if a != 'all': 
+            _data = hf['anomaly_data/{}/{}'.format(a,field)][:]
+            mask = np.random.choice(np.arange(len(_data)),50)
             data = np.concatenate([data,
-                                   _data],axis=0)
+                                   _data[mask]],axis=0)
     return data
 
 class LOFARDataset(Dataset):
@@ -134,21 +136,18 @@ class LOFARDataset(Dataset):
         else:
             self._labels= np.repeat(labels, self.n_patches**2, axis=0)
 
-        self._stations = self.encode_stations(source)
-        self._stations = torch.from_numpy(np.repeat(self._stations, self.n_patches**2, axis=0))
 
         data = self.normalise(data)
         self._data = torch.from_numpy(data).permute(0,3,1,2)
         self._data = self.patch(self._data)
 
-        (self._context_labels, 
-         self._context_images_neighbour) = self.context_prediction(10, args)
-
-        self._jittered_data = self.jitter(args)
-
         self._frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self._frequency_band = self.patch(self._frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
         self._frequency_band = torch.from_numpy(self.encode_frequencies(self._frequency_band.numpy()))
+
+        (self._context_labels, 
+         self._context_images_neighbour,
+         self._context_frequency_neighbour) = self.context_prediction(args)
 
         self.transform=transform 
         self.set_anomaly_mask('all')
@@ -163,15 +162,14 @@ class LOFARDataset(Dataset):
         datum = self.data[idx,...]
         label = self.labels[idx]
         frequency = self.frequency_band[idx] 
-        station = self.stations[idx]
         context_label = self.context_labels[idx]
         context_image_neighbour = self.context_images_neighbour[idx]
-        jittered_datum = self.jittered_data[idx]
+        context_frequency_neighbour = self.context_frequency_neighbour[idx]
 
         if self.transform:
             datum = self.transform(datum)
 
-        return datum, label, frequency, station, context_label, context_image_neighbour, jittered_datum
+        return datum, label, frequency, context_label, context_image_neighbour, context_frequency_neighbour
 
     def set_anomaly_mask(self, anomaly:str):
         """
@@ -195,10 +193,9 @@ class LOFARDataset(Dataset):
         self.labels = self._labels[self.anomaly_mask]
         self.frequency_band = self._frequency_band[self.anomaly_mask]
         self.source = self._source[self.anomaly_mask]
-        self.stations = self._stations[self.anomaly_mask]
         self.context_labels = self._context_labels[self.anomaly_mask]
         self.context_images_neighbour = self._context_images_neighbour[self.anomaly_mask]
-        self.jittered_data = self._jittered_data[self.anomaly_mask]
+        self.context_frequency_neighbour= self._context_frequency_neighbour[self.anomaly_mask]
 
     def circular_shift(self,
                        data:np.array, 
@@ -263,29 +260,9 @@ class LOFARDataset(Dataset):
         encoded_frequencies = []
         for f in frequency_band:
             _temp = '-'.join((str(f[0]),str(f[1])))
-            encoded_frequencies.append(0)#np.where(np.array(default_frequency_bands[self.args.patch_size]) == _temp)[0][0])
+            encoded_frequencies.append(0)#np.where(np.array(defaults.frequency_bands[self.args.patch_size]) == _temp)[0][0])
 
         return np.array(encoded_frequencies)
-
-    def encode_stations(self, sources:list)->np.array:
-        """
-            Extracts stations from source feild of dataset and encodes 
-            
-            Parameters
-            ----------
-            sources:  np.array of sources for each baseline
-
-            Returns
-            -------
-            encoded_stations: station names encoded between 0-1
-
-        """
-        stations = np.array([s.split('_')[2] for s in sources])
-        #_u = np.unique(stations)
-        #mapping  = np.linspace(0, 1, len(_u))
-        encoded_stations = np.array([np.where(np.array(defaults.default_stations) == s)[0][0] for s in stations]) 
-        #encoded_stations = mapping[indexes]
-        return encoded_stations
 
     def normalise(self, data:np.array)->np.array:
         """
@@ -328,18 +305,17 @@ class LOFARDataset(Dataset):
                 self.args.patch_size)
         return patches
 
-    def context_prediction(self, N:int, args:args) -> (torch.tensor, torch.tensor, torch.tensor):
+    def context_prediction(self, args:args) -> (torch.tensor, torch.tensor, torch.tensor):
         """
             Arranges a context prediction dataset
             
             Parameters
             ----------
-            N: Number of context samples to choose per image
             args: cmd arugments
 
             Returns
             -------
-            patches: tensor of patches reshaped to (N*(h/size)*(w/size),C,h/size, w/size)
+            patches: tensor of patches reshaped to ((h/size)*(w/size),C,h/size, w/size)
 
         """
 
@@ -348,11 +324,13 @@ class LOFARDataset(Dataset):
                                              self._data.shape[1],
                                              args.patch_size, 
                                              args.patch_size],dtype='float32')
+        context_frequency_neighbour = np.zeros([self._frequency_band.shape[0]],dtype='int')
         _indx = 0
         _locations = [-self.n_patches-1, -self.n_patches, -self.n_patches+1, -1, +1, +self.n_patches-1, +self.n_patches, +self.n_patches+1]
 
         for _image_indx in range(self.n_patches**2, self._data.shape[0]+1,self.n_patches**2):
             temp_patches = self._data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
+            temp_freq = {0:0, 1:0, 2:0, 3:1, 4:1, 5:2,6:2, 7:2}
 
             for _patch_index in range(self.n_patches**2):
                 if _patch_index < self.n_patches:
@@ -418,107 +396,11 @@ class LOFARDataset(Dataset):
                     #[-1               ,       X        ,                 1]
                     #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
                 context_images_neighbour[_indx,:] = temp_patches[_patch_index + _locations[context_labels[_indx]]]
+                context_frequency_neighbour[_indx] = temp_freq[context_labels[_indx]]
                 _indx +=1
         context_labels = torch.from_numpy(context_labels)
         context_images_neighbour = torch.from_numpy(context_images_neighbour)
+        context_frequency_neighbour= torch.from_numpy(context_frequency_neighbour)
 
-        return context_labels, context_images_neighbour
+        return context_labels, context_images_neighbour, context_frequency_neighbour
 
-    def jitter(self, args:args) -> torch.tensor:
-        """
-            Creates a jittered pair for training  
-            
-            Parameters
-            ----------
-            args: cmd arugments
-
-            Returns
-            -------
-            jittered_data: tensor of patches 
-
-        """
-
-        jittered_data = np.ones([self._data.shape[0],
-                                 self._data.shape[1],
-                                 args.patch_size, 
-                                 args.patch_size],dtype='float32')
-        _indx = 0
-
-        for _image_indx in range(self.n_patches**2, self._data.shape[0]+1,self.n_patches**2):
-            temp_patches = self._data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
-            temp_data = reconstruct(temp_patches, args) # reconstruct to  shape (1,4,256,256)
-
-            _max = args.amount
-
-            for _patch_index in range(self.n_patches**2):
-                x_coor = args.patch_size*(_patch_index%self.n_patches)
-                y_coor = args.patch_size*(_patch_index//self.n_patches)
-
-                if _patch_index < self.n_patches:
-                    # TOPRIGHT 
-                    if _patch_index % self.n_patches == self.n_patches-1:
-                        # x-jitter can only be negative 
-                        x_coor = x_coor + np.random.randint(-_max, 0)
-                        # y-jitter can only be positive
-                        y_coor = y_coor + np.random.randint(0, _max)
-
-                    # TOPLEFT 
-                    elif _patch_index % self.n_patches == 0:
-                        # x-jitter can only be positive 
-                        x_coor = x_coor + np.random.randint(0, _max)
-                        # y-jitter can only be positive
-                        y_coor = y_coor + np.random.randint(0, _max)
-
-                    else: #TOPMIDDLE
-                        # x-jitter can be positive or negative 
-                        x_coor = x_coor + np.random.randint(-_max, _max)
-                        # y-jitter can only be positive
-                        y_coor = y_coor + np.random.randint(0, _max)
-
-                elif _patch_index >= self.n_patches**2 -self.n_patches:
-                    # BOTTOMRIGHT 
-                    if _patch_index % self.n_patches == self.n_patches-1:
-                        # x-jitter can only be negative 
-                        x_coor = x_coor + np.random.randint(-_max,0)
-                        # y-jitter can only be negative 
-                        y_coor = y_coor + np.random.randint( -_max,0)
-
-                    # BOTTOMLEFT 
-                    elif _patch_index % self.n_patches == 0:
-                        # x-jitter can only be positive 
-                        x_coor = x_coor + np.random.randint(0,_max)
-                        # y-jitter can only be negative 
-                        y_coor = y_coor + np.random.randint( -_max,0)
-
-                    else: #BOTTOMMIDDLE
-                        # x-jitter can be positive or negative 
-                        x_coor = x_coor + np.random.randint(-_max,_max)
-                        # y-jitter can only be negative 
-                        y_coor = y_coor + np.random.randint( -_max,0)
-
-
-                elif _patch_index % self.n_patches == self.n_patches-1: #RIGHT
-                    # x-jitter can only be negative 
-                    x_coor = x_coor + np.random.randint(-_max,0)
-                    # y-jitter can be positive or negative 
-                    y_coor = y_coor + np.random.randint( -_max,_max)
-
-                elif _patch_index % self.n_patches == 0: #LEFT
-                    # x-jitter can only be positive
-                    x_coor = x_coor + np.random.randint(0,_max)
-                    # y-jitter can be positive or negative 
-                    y_coor = y_coor + np.random.randint( -_max,_max)
-                
-                else: #MIDDEL
-                    # x-jitter can be positive or negative
-                    x_coor = x_coor + np.random.randint(-_max,_max)
-                    # y-jitter can be positive or negative 
-                    y_coor = y_coor + np.random.randint( -_max,_max)
-
-                jittered_data[_indx,:] = temp_data[0,
-                                                   :,
-                                                   y_coor:y_coor+args.patch_size,
-                                                   x_coor:x_coor+args.patch_size]
-                _indx +=1
-
-        return torch.from_numpy(jittered_data)

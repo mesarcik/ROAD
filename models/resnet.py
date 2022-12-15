@@ -31,11 +31,9 @@ class ResNet(nn.Module):
         self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, 
-                input_0: torch.tensor,
-                input_1: torch.tensor,
+                x_0: torch.tensor,
+                x_1: torch.tensor,
                 **kwargs):
-        x_0 = self.resnet(input_0)
-        x_1 = self.resnet(input_1)
         z = torch.cat([x_0, x_1], axis=1)
         c = self.classifier(z)
 
