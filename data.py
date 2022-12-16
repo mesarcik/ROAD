@@ -118,14 +118,14 @@ class LOFARDataset(Dataset):
             roll=False,
             fine_tune=False):# set default types
 
-        if roll:
-            _data, _frequency_band = self.circular_shift(data, 
-                                                       frequency_band, 
-                                                       args.patch_size//2)
-            data = np.concatenate([data, _data],axis=0)
-            frequency_band= np.concatenate([frequency_band, _frequency_band],axis=0)
-            labels = np.concatenate([labels, labels],axis=0)
-            source = np.concatenate([source, source],axis=0)
+        #if roll:
+        #    _data, _frequency_band = self.circular_shift(data, 
+        #                                               frequency_band, 
+        #                                               args.patch_size//2)
+        #    data = np.concatenate([data, _data],axis=0)
+        #    frequency_band= np.concatenate([frequency_band, _frequency_band],axis=0)
+        #    labels = np.concatenate([labels, labels],axis=0)
+        #    source = np.concatenate([source, source],axis=0)
             
 
         self.args = args
