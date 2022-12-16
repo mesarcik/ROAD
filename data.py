@@ -17,10 +17,10 @@ def get_finetune_data(args, transform=None):
     (test_data, train_data,
     test_labels, train_labels,
     test_frequency_band, train_frequency_band,
-    test_source, train_source) = train_test_split(_join(hf, 'data'),
-                                                  _join(hf, 'labels').astype(str),
-                                                  _join(hf, 'frequency_band'),
-                                                  _join(hf, 'source').astype(str),
+    test_source, train_source) = train_test_split(_join(hf, 'data', args),
+                                                  _join(hf, 'labels', args).astype(str),
+                                                  _join(hf, 'frequency_band', args),
+                                                  _join(hf, 'source', args).astype(str),
                                                   test_size=0.3,
                                                   random_state=args.seed)
     train_dataset = LOFARDataset(train_data,
@@ -55,7 +55,7 @@ def get_data(args, transform=None):
                                                  test_size=0.05, 
                                                  random_state=args.seed)
     mask = np.random.choice(np.arange(len(train_labels)),
-                             int(len(train_labels)*args.percentage_data))
+                             int(len(train_labels)*1.0))#args.percentage_data))
     train_dataset = LOFARDataset(train_data[mask], 
                                  train_labels[mask], 
                                  train_frequency_band[mask], 
@@ -71,16 +71,16 @@ def get_data(args, transform=None):
                                  args,
                                  transform=None)
 
-    test_dataset = LOFARDataset(_join(hf, 'data'),
-                                _join(hf, 'labels').astype(str),
-                                _join(hf, 'frequency_band'),
-                                _join(hf, 'source').astype(str),
+    test_dataset = LOFARDataset(_join(hf, 'data', args),
+                                _join(hf, 'labels', args).astype(str),
+                                _join(hf, 'frequency_band', args),
+                                _join(hf, 'source', args).astype(str),
                                 args,
                                 transform=None)
 
     return train_dataset, val_dataset, test_dataset
 
-def _join(hf:h5py.File, field:str)->np.array:
+def _join(hf:h5py.File, field:str,args)->np.array:
     """
         Joins together the normal and anomalous testing data
         
@@ -98,9 +98,13 @@ def _join(hf:h5py.File, field:str)->np.array:
     for a in defaults.anomalies:
         if a != 'all': 
             _data = hf['anomaly_data/{}/{}'.format(a,field)][:]
-            mask = np.random.choice(np.arange(len(_data)),50)
+            if args.percentage_data > len(_data):
+                a = len(_data)
+            else:
+                a= int(args.percentage_data)
+            mask = np.random.choice(np.arange(len(_data)),a)
             data = np.concatenate([data,
-                                   _data[mask]],axis=0)
+                                   _data],axis=0)
     return data
 
 class LOFARDataset(Dataset):
@@ -273,7 +277,7 @@ class LOFARDataset(Dataset):
         for i, spec in enumerate(data):
             for pol in range(data.shape[-1]):
                 _min, _max = np.percentile(spec[...,pol], [self.args.amount,100-self.args.amount])
-                temp = np.clip(spec[...,pol],_min, _max)
+                temp = np.clip(spec[...,pol],0, _max)
                 temp = np.log(temp)
                 temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
                 _data[i,...,pol] = temp
@@ -330,7 +334,9 @@ class LOFARDataset(Dataset):
 
         for _image_indx in range(self.n_patches**2, self._data.shape[0]+1,self.n_patches**2):
             temp_patches = self._data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
-            temp_freq = {0:0, 1:0, 2:0, 3:1, 4:1, 5:2,6:2, 7:2}
+            temp_freq = {0:0, 1:1, 2:2, 
+                         3:0,      4:2, 
+                         5:0, 6:1, 7:2}
 
             for _patch_index in range(self.n_patches**2):
                 if _patch_index < self.n_patches:

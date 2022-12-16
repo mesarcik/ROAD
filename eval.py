@@ -219,7 +219,7 @@ def eval_resnet(resnet:ResNet,
     resnet.eval()
     
     z_train, x_train = [],[]
-    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
+    for _data, _target, _freq, _station, _context,_  in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -234,7 +234,7 @@ def eval_resnet(resnet:ResNet,
         z_test, x_test = [], []
         test_dataloader.dataset.set_anomaly_mask(anomaly)
 
-        for _data, _target, _freq, _station, _context,_,_ in test_dataloader:
+        for _data, _target, _freq, _station, _context,_ in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
@@ -321,7 +321,7 @@ def eval_finetune(resnet:ResNet,
 
     predictions, targets  = [], []
 
-    for _data, _target, _, _, _, _, _ in test_dataloader:
+    for _data, _target, _, _, _, _ in test_dataloader:
         _target = _target.type(torch.LongTensor).to(args.device)
         _data = _data.type(torch.FloatTensor).to(args.device)
 

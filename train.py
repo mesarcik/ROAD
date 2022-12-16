@@ -229,7 +229,7 @@ def train_position_classifier(
                 location_loss = resnet.loss_function(c_pos, _context_label)['loss']
                 frequency_loss = classifier.loss_function(c_freq, _context_frequency)['loss']
 
-                loss = 0.75*location_loss + 0.25*frequency_loss #+ 0.00001*torch.sum(torch.square(_z))#classifier_loss +  
+                loss = 0.9*location_loss + 0.1*frequency_loss #+ 0.00001*torch.sum(torch.square(_z))#classifier_loss +  
 
                 loss.backward()
                 encoder_optimizer.step()
@@ -251,7 +251,7 @@ def train_position_classifier(
                         dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
                 running_acc += val_acc_context
 
-                c_freq= resnet(z_data, z_neighbour).cpu().detach()
+                c_freq= classifier(z_data, z_neighbour).cpu().detach()
                 val_acc_freq = torch.sum(
                     c_freq.argmax(
                         dim=-1) == val_dataset.context_frequency_neighbour) / val_dataset.context_frequency_neighbour.shape[0]
