@@ -172,6 +172,7 @@ def eval_vae(vae:VAE,
 
                 save_results(args, 
                         anomaly=anomaly,
+                        epoch=args.epochs,
                         neighbour=N,
                         auroc=auroc, 
                         auprc=auprc, 

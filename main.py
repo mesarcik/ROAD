@@ -39,9 +39,10 @@ def main():
                   latent_dim=args.latent_dim,
                   patch_size=args.patch_size,
                   hidden_dims=args.hidden_dims)
-        vae = train_vae(train_dataloader, vae, args)
         if args.load_model:
             vae.load_state_dict(torch.load('outputs/vae/{}/vae.pt'.format(args.model_name)))
+        else:
+            vae = train_vae(train_dataloader, vae, args)
         eval_vae(vae, train_dataloader, test_dataloader, args, error='nln')
 
     elif args.model == 'resnet':

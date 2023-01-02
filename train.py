@@ -229,7 +229,7 @@ def train_position_classifier(
                 location_loss = resnet.loss_function(c_pos, _context_label)['loss']
                 frequency_loss = classifier.loss_function(c_freq, _context_frequency)['loss']
 
-                loss = 0.9*location_loss + 0.1*frequency_loss #+ 0.00001*torch.sum(torch.square(_z))#classifier_loss +  
+                loss = location_loss + frequency_loss #+ 1.00001*torch.sum(torch.square(_z))#classifier_loss +  
 
                 loss.backward()
                 encoder_optimizer.step()
@@ -288,13 +288,14 @@ def train_position_classifier(
 
                 resnet.eval()
 
-                Z = resnet.embed(_data).cpu().detach().numpy()
+                Z = z_data.cpu().detach().numpy()  #resnet.embed(_data).cpu().detach().numpy()
                 z = TSNE(n_components=2,
                          learning_rate='auto',
                          init='random',
                          perplexity=30).fit_transform(Z)
 
                 _inputs = _data.cpu().detach().numpy()
+
                 imscatter(z, _inputs, model_path, epoch)
 
             loss_curve(model_path,
