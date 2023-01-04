@@ -262,7 +262,6 @@ def eval_resnet(resnet:ResNet,
                 D = np.clip(D,_min, _max)
                 D = ((D - D.min()) / (D.max() - D.min()))
 
-
                 nln_io(5, 
                     x_recon, 
                     neighbours_recon,

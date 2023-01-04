@@ -7,6 +7,13 @@ anomalies = [
     'lightning',
     'strong_radio_emitter',
     'solar_storm']
+percentage_comtamination = {'oscillating_tile':0.01,
+                            'real_high_noise':0.13,
+                            'electric_fence':0.01,
+                            'data_loss':0.06,
+                            'lightning':0.05,
+                            'strong_radio_emitter':0.2,
+                            'solar_storm':0.02}
 default_stations = [
     'CS001HBA0',
     'CS001HBA1',
@@ -265,6 +272,4 @@ frequency_bands = {
        '71968080.0-36039732.0', '73233030.0-15727234.0',
        '74751280.0-38822936.0', '74946590.0-39018250.0',
        '79190060.0-18705750.0', '9960938.0-21684266.0'] 
-           
-           
-           }
+       }

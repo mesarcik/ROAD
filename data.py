@@ -29,7 +29,7 @@ def get_finetune_data(args, transform=None):
                                  train_source,
                                  args,
                                  transform=transform,
-                                 roll=True,
+                                 roll=False,
                                  fine_tune=True)
 
     test_dataset =   LOFARDataset(test_data,
@@ -38,7 +38,8 @@ def get_finetune_data(args, transform=None):
                                  test_source,
                                  args,
                                  transform=None,
-                                 fine_tune=True)
+                                 fine_tune=True,
+                                 test=True)
 
     return train_dataset, test_dataset
 
@@ -62,7 +63,7 @@ def get_data(args, transform=None):
                                  train_source[mask],
                                  args,
                                  transform=transform,
-                                 roll=True)
+                                 roll=False)
 
     val_dataset =   LOFARDataset(val_data, 
                                  val_labels, 
@@ -76,7 +77,8 @@ def get_data(args, transform=None):
                                 _join(hf, 'frequency_band', args),
                                 _join(hf, 'source', args).astype(str),
                                 args,
-                                transform=None)
+                                transform=None,
+                                test=True)
 
     return train_dataset, val_dataset, test_dataset
 
@@ -116,7 +118,10 @@ class LOFARDataset(Dataset):
             args:args, 
             transform=None,
             roll=False,
-            fine_tune=False):# set default types
+            fine_tune=False,
+            test=False):# set default types
+
+        self.test = test
 
         if roll:
             _data, _frequency_band = self.circular_shift(data, 
@@ -175,6 +180,44 @@ class LOFARDataset(Dataset):
 
         return datum, label, frequency, context_label, context_image_neighbour, context_frequency_neighbour
 
+    def set_percentage_contam(self, anomaly:str)->np.array:
+        """
+            Sets the contamination per anomaly class
+            
+            Parameters
+            ----------
+            anomaly: anomaly class for mask 
+
+            Returns
+            -------
+            None 
+        """
+        assert anomaly in defaults.anomalies or anomaly =='all', "Anomaly not found"
+
+        if self.test:
+            _normal_samples = [i for i,l in enumerate(self._labels) if l == '' ]
+            mask = np.zeros(self._labels.shape, dtype='bool')
+            mask[_normal_samples] = True
+
+            if anomaly == 'all':
+                for a in defaults.anomalies:
+                    temp_indx = [i for i,l in enumerate(self._labels) if a in l]
+                    temp_mask = np.random.choice(temp_indx,
+                                            int(len(_normal_samples)*
+                                                defaults.percentage_comtamination[a]))
+                    mask[temp_mask] = True 
+            else:
+                temp_indx = [i for i,l in enumerate(self._labels) if anomaly in l]
+
+                temp_mask = np.random.choice(temp_indx,
+                                        int(len(_normal_samples)*
+                                            defaults.percentage_comtamination[anomaly]))
+                mask[temp_mask] = True
+        else:
+            mask = [True]*len(self._data)
+
+        return mask
+
     def set_anomaly_mask(self, anomaly:str):
         """
             Sets the mask for the dataloader to load only specific classes 
@@ -187,12 +230,8 @@ class LOFARDataset(Dataset):
             -------
             None 
         """
-        assert anomaly in defaults.anomalies or anomaly =='all', "Anomaly not found"
-        if anomaly == 'all':
-            self.anomaly_mask = [True]*len(self._data)
-        else:
-            self.anomaly_mask = [((anomaly in l) | (l == '')) for l in self._labels]
 
+        self.anomaly_mask = self.set_percentage_contam(anomaly)
         self.data = self._data[self.anomaly_mask]
         self.labels = self._labels[self.anomaly_mask]
         self.frequency_band = self._frequency_band[self.anomaly_mask]
