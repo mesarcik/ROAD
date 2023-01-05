@@ -80,8 +80,8 @@ def create_dataset()->None:
     test_group = hf.create_group('test_data')
     anomalies_group = hf.create_group('anomaly_data')
 
-    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_16-11-22.pkl', 'rb') as f:
-        data, labels, source, ids, frequency_band = cPickle.load(f,encoding='latin')
+    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_15-12-22.pkl', 'rb') as f:
+        data, labels, source, ids, frequency_band, flags = cPickle.load(f,encoding='latin')
   
     data, labels, source, ids, frequency_band  = remove_singles(data, 
                                                                 labels, 
@@ -106,7 +106,7 @@ def create_dataset()->None:
     train_frequency = np.array([frequency_band[i] for i in train_inds], dtype='float32')
 
     # Randomly sample non-anomalous data for train/test split
-    reserved_samples = 1200
+    reserved_samples = 800
     mask = np.zeros(len(train_inds))
     mask[:reserved_samples] = 1
     np.random.shuffle(mask)
