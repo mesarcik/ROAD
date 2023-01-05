@@ -357,6 +357,7 @@ def eval_finetune(resnet:ResNet,
         f1_score=f1)
 
     for encoding, anomaly in enumerate(anomalies):
+        if anomaly =='all': continue
 
         auroc, auprc, f1 = compute_metrics(targets,
                                            predictions==encoding,

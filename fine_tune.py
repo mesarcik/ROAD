@@ -98,6 +98,7 @@ def fine_tune(
             loss_curve(model_path,
                        epoch,
                        total_loss=total_train_loss,
-                       train_accuracies=accuracies)
+                       train_accuracies=accuracies,
+                       descriptor='finetune')
 
     return classification_head 

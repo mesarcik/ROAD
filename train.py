@@ -73,7 +73,7 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
                 _reconstructions = _decoded.cpu().detach().numpy()
                 io(10, _inputs, _reconstructions, model_path, epoch)
                 imscatter(z, _inputs, model_path, epoch)
-            loss_curve(model_path, epoch, total_loss=train_loss)
+            loss_curve(model_path, epoch, total_loss=train_loss, descriptor='vae')
             vae.train()
     return vae
 
@@ -157,7 +157,8 @@ def train_resnet(
             loss_curve(model_path,
                        epoch,
                        total_loss=train_loss,
-                       validation_accuracy=validation_accuracies)
+                       validation_accuracy=validation_accuracies,
+                       descriptor='resnet')
             resnet.train()
     return resnet
 
@@ -312,7 +313,8 @@ def train_position_classifier(
                        frequency_loss=location_train_loss,
                        jitter_loss=jitter_train_loss,
                        validation_accuracy=validation_accuracies,
-                       context_accuracies=context_accuracies)
+                       context_accuracies=context_accuracies,
+                       descriptor='position')
             classifier.train()
             resnet.train()
     return resnet

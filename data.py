@@ -124,8 +124,8 @@ class LOFARDataset(Dataset):
 
         self.args = args
         self.anomaly_mask = []
-        self._source = source
         self.n_patches = int(defaults.SIZE[0]/args.patch_size)
+        self._source = np.repeat(source, self.n_patches**2, axis=0)
 
         if fine_tune: 
             self._labels = self.encode_labels(labels)
@@ -185,6 +185,7 @@ class LOFARDataset(Dataset):
             -------
             None 
         """
+        assert anomaly in defaults.anomalies or anomaly =='all', "Anomaly not found"
         if anomaly == 'all':
             self.anomaly_mask = [True]*len(self._data)
         else:
@@ -193,6 +194,7 @@ class LOFARDataset(Dataset):
         self.data = self._data[self.anomaly_mask]
         self.labels = self._labels[self.anomaly_mask]
         self.frequency_band = self._frequency_band[self.anomaly_mask]
+        self.source = self._source[self.anomaly_mask]
         self.stations = self._stations[self.anomaly_mask]
         self.context_labels = self._context_labels[self.anomaly_mask]
         self.context_images_neighbour = self._context_images_neighbour[self.anomaly_mask]
