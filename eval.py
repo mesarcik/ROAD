@@ -9,7 +9,7 @@ from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
 from utils.vis import io, nln_io
 from data import get_data
-from utils.data import anomalies, SIZE
+from utils.data import defaults
 from utils.data.patches import reconstruct, reconstruct_distances
 
 def nln(z_test:np.array, 
@@ -68,7 +68,7 @@ def integrate(error:np.array, args:args)->np.array:
 
     """
     dists = np.mean(error, axis = tuple(range(1,error.ndim)))
-    n_patches = int(SIZE[0]//args.patch_size)
+    n_patches = int(defaults.SIZE[0]//args.patch_size)
     dists = dists.reshape(len(error[::n_patches**2]),
             n_patches,
             n_patches)
@@ -145,8 +145,8 @@ def eval_vae(vae:VAE,
     z_train = np.vstack(z_train) 
     x_hat_train = np.vstack(x_hat_train)
     
-    anomalies.append('all')
-    for anomaly in anomalies:
+    defaults.anomalies.append('all')
+    for anomaly in defaults.anomalies:
         gc.collect()
         z_test= []
         x_hat_test = []
@@ -165,13 +165,14 @@ def eval_vae(vae:VAE,
                 # build a flat (CPU) index
                 D, I = nln(z_test, z_train, N, args)
                 dists = integrate(D, args)
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
                                                     dists)
 
                 print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1))
 
                 save_results(args, 
                         anomaly=anomaly,
+                        epoch=args.epochs,
                         neighbour=N,
                         auroc=auroc, 
                         auprc=auprc, 
@@ -180,7 +181,7 @@ def eval_vae(vae:VAE,
         elif error == 'recon':
             error = (x_hat_test - test_dataloader.dataset.data.numpy())**2
             error = integrate(error, args)
-            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
+            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
                                                 error)
 
             print("AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(auroc, auprc, f1))
@@ -197,7 +198,6 @@ def eval_resnet(resnet:ResNet,
                 test_dataloader: DataLoader, 
                 args:args, 
                 plot:bool=True,
-                epoch=100,
                 error:str="nln")->None:
     """
         Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types 
@@ -219,7 +219,7 @@ def eval_resnet(resnet:ResNet,
     resnet.eval()
     
     z_train, x_train = [],[]
-    for _data, _target, _freq, _station, _context,_,_ in train_dataloader:
+    for _data, _target, _freq, _station, _context,_  in train_dataloader:
         _data = _data.float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
@@ -228,58 +228,55 @@ def eval_resnet(resnet:ResNet,
     z_train = np.vstack(z_train) 
     x_train = np.vstack(x_train) 
 
-    anomalies.append('all')
-    for __count__, anomaly in enumerate(anomalies):
+    defaults.anomalies.append('all')
+    for __count__, anomaly in enumerate(defaults.anomalies):
         gc.collect()
         z_test, x_test = [], []
         test_dataloader.dataset.set_anomaly_mask(anomaly)
 
-        for _data, _target, _freq, _station, _context,_,_ in test_dataloader:
+        for _data, _target, _freq, _station, _context,_ in test_dataloader:
             _data = _data.float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
             x_test.append(_data.cpu().detach().numpy())
         z_test, x_test = np.vstack(z_test), np.vstack(x_test)
 
+        N = int(np.max(args.neighbours))
+        _D, _I = nln(z_test, z_train, N, args)
+
         if plot:
             x_recon = reconstruct(x_test, args)
 
-        if error == 'nln':
-            N = int(np.max(args.neighbours))
-            _D, _I = nln(z_test, z_train, N, args)
-
-            if plot:
-                neighbours = x_train[_I]
-                neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
-                                            for i in range(neighbours.shape[1])])
-                D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(SIZE[0]//args.patch_size)**2 ,
-                                                           int(SIZE[0]//args.patch_size),
-                                                           int(SIZE[0]//args.patch_size))
+            neighbours = x_train[_I]
+            neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
                                         for i in range(neighbours.shape[1])])
+            D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(defaults.SIZE[0]//args.patch_size)**2 ,
+                                                       int(defaults.SIZE[0]//args.patch_size),
+                                                       int(defaults.SIZE[0]//args.patch_size))
+                                    for i in range(neighbours.shape[1])])
 
-                _min, _max = np.percentile(D, [1,99])
-                D = np.clip(D,_min, _max)
-                D = ((D - D.min()) / (D.max() - D.min()))
+            _min, _max = np.percentile(D, [1,99])
+            D = np.clip(D,_min, _max)
+            D = ((D - D.min()) / (D.max() - D.min()))
 
-
-                nln_io(5, 
-                    x_recon, 
-                    neighbours_recon,
-                    test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
-                    D,
-                    'outputs/{}/{}'.format(args.model, args.model_name),
-                    epoch, 
-                    anomaly) 
+            nln_io(5, 
+                x_recon, 
+                neighbours_recon,
+                test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
+                D,
+                'outputs/{}/{}'.format(args.model, args.model_name),
+                args.epochs, 
+                anomaly) 
 
             for n in range(1,N+1):
                 # build a flat (CPU) index
                 D,I = _D[:,:n], _I[:,:n]
                 dists = integrate(D,  args)
 
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(SIZE[0]//args.patch_size)**2], 
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
                                                     dists)
 
-                print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(epoch,
+                print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(args.epochs,
                                                                                         n,
                                                                                         auroc,
                                                                                         auprc,
@@ -287,7 +284,7 @@ def eval_resnet(resnet:ResNet,
 
                 save_results(args, 
                         anomaly=anomaly,
-                        epoch=epoch,
+                        epoch=args.epochs,
                         neighbour=n,
                         auroc=auroc, 
                         auprc=auprc, 
@@ -296,7 +293,7 @@ def eval_finetune(resnet:ResNet,
                   classification_head:ClassificationHead,
                   test_dataloader: DataLoader,
                   args,
-                  epoch:int=-1,
+                  epochs:int=-1,
                   plot:bool=True)->None:
     """
         Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types
@@ -321,42 +318,42 @@ def eval_finetune(resnet:ResNet,
 
     predictions, targets  = [], []
 
-    for _data, _target, _, _, _, _, _ in test_dataloader:
+    for _data, _target, _, _, _, _ in test_dataloader:
         _target = _target.type(torch.LongTensor).to(args.device)
         _data = _data.type(torch.FloatTensor).to(args.device)
 
         _z = resnet.embed(_data)
-        _z = _z.view(_z.shape[0]//(SIZE[0]//args.patch_size)**2,
-                        ((SIZE[0]//args.patch_size)**2)*args.latent_dim)
+        _z = _z.view(_z.shape[0]//(defaults.SIZE[0]//args.patch_size)**2,
+                        ((defaults.SIZE[0]//args.patch_size)**2)*args.latent_dim)
         c = classification_head(_z)
         c = c.argmax(dim=-1).cpu().detach()
-        target = _target[::(SIZE[0]//args.patch_size)**2].cpu().detach()
+        target = _target[::(defaults.SIZE[0]//args.patch_size)**2].cpu().detach()
 
         predictions.extend(c.numpy().flatten())
         targets.extend(target.numpy().flatten())
 
     predictions, targets = np.array(predictions), np.array(targets)
     # For the null class
-    encoding = len(anomalies)
+    encoding = len(defaults.anomalies)
     auroc, auprc, f1 = compute_metrics(targets,
                                        predictions==encoding, 
                                        anomaly=encoding, 
                                        multiclass=True)
     print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format('normal',
-                                                                                  epoch,
+                                                                                  args.epochs,
                                                                                   auroc,
                                                                                   auprc,
                                                                                   f1))
 
     save_results(args,
         anomaly='normal',
-        epoch=epoch,
+        epoch=args.epochs,
         neighbour=-1,
         auroc=auroc,
         auprc=auprc,
         f1_score=f1)
 
-    for encoding, anomaly in enumerate(anomalies):
+    for encoding, anomaly in enumerate(defaults.anomalies):
         if anomaly =='all': continue
 
         auroc, auprc, f1 = compute_metrics(targets,
@@ -365,13 +362,13 @@ def eval_finetune(resnet:ResNet,
                                            multiclass=True)
 
         print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(anomaly,
-                                                                                      epoch,
+                                                                                      args.epochs,
                                                                                       auroc,
                                                                                       auprc,
                                                                                       f1))
         save_results(args,
             anomaly=anomaly,
-            epoch=epoch,
+            epoch=args.epochs,
             neighbour=-1,
             auroc=auroc,
             auprc=auprc,

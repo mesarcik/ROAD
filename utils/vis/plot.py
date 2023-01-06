@@ -91,12 +91,13 @@ def nln_io(n_plots:int,
 def loss_curve(path:str,epoch:int, **kwargs)->None:
     plt.title("Train-Validation Accuracy")
     for _name, _loss in kwargs.items():
+        if _name == 'descriptor': continue
         plt.plot(np.arange(epoch),_loss, label=_name)
 
     plt.legend()
     plt.xlabel('num_epochs', fontsize=12)
     plt.ylabel('loss', fontsize=12)
 
-    plt.savefig('{}/loss_{}'.format(path,kwargs['descriptor']),dpi=99)
+    plt.savefig('{}/loss_{}'.format(path,str(kwargs['descriptor'])),dpi=99)
 
     plt.close('all')

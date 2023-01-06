@@ -9,13 +9,13 @@ class ResNet(nn.Module):
         self.in_channels = in_channels
 
         # embedding 
-        self.resnet = models.resnet18(weights=None)
+        self.resnet = models.resnet50(weights=None)
         self.resnet.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                  kernel_size=(7, 7), 
                                  stride=(2, 2), 
                                  padding=(3, 3), 
                                  bias=False)
-        self.resnet.fc = nn.Linear(512, latent_dim)
+        self.resnet.fc = nn.Linear(2048, latent_dim)
         #self.resnet =torch.nn.Sequential(*(list(resnet.children())[:-1]))
 
         # classifier  
@@ -31,11 +31,9 @@ class ResNet(nn.Module):
         self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, 
-                input_0: torch.tensor,
-                input_1: torch.tensor,
+                x_0: torch.tensor,
+                x_1: torch.tensor,
                 **kwargs):
-        x_0 = self.resnet(input_0)
-        x_1 = self.resnet(input_1)
         z = torch.cat([x_0, x_1], axis=1)
         c = self.classifier(z)
 

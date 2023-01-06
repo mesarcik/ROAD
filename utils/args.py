@@ -22,10 +22,11 @@ parser.add_argument('-patch_size', metavar='-ps', type=int, default=32, help = '
 parser.add_argument('-batch_size', metavar='-bs', type=int, default=2**11, help = 'Batch size')
 parser.add_argument('-learning_rate', metavar='-lr', type=float, default=1e-3, help = 'Learning rate')
 parser.add_argument('-hidden_dims', metavar='-hd', nargs='+',type=int, default=[32,64,128,256], help = 'Hidden dims for VAE')
-parser.add_argument('-percentage_anomalies', metavar='-pa', type=float, default=0.1, help = 'Percentage of anomalies')
+parser.add_argument('-percentage_data', metavar='-pd', type=float, default=1.0, help = 'Percentage training data')
 parser.add_argument('-amount', metavar='-am', type=float, default=0.1, help = 'Amount of test data')
 parser.add_argument('-model_name', metavar='-mn', type=str, default=None, help = 'Model name for loading')
 parser.add_argument('-fine_tune', metavar='-ft', type=bool, default=True, help = 'Use pretrained models for finetuning')
+parser.add_argument('-kernel_size', metavar='-ks', type=int, default=3,  choices={3,5}, help = 'Kernel size of context prediction')
 
 args = parser.parse_args()
 

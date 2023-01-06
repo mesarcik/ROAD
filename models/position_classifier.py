@@ -38,6 +38,10 @@ class PositionClassifier(nn.Module):
 
         return {'loss':loss}
 
-    def forward(self, input:torch.tensor):
-        z = self.model(input)
-        return z
+    def forward(self, 
+                x_0: torch.tensor,
+                x_1: torch.tensor,
+                **kwargs):
+        z = torch.cat([x_0, x_1], axis=1)
+        c = self.model(z)
+        return c

@@ -42,7 +42,7 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
-            for _data, _target, _freq, _station, _context, _ in tepoch:
+            for _data, _target, _freq, _context, _, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
                 optimizer.zero_grad()
@@ -113,7 +113,7 @@ def train_resnet(
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc = 0.0, 0.0
-            for _data, _target, _freq, _station, _context in tepoch:
+            for _data, _target, _freq, _context, _, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _data = _data.float().to(args.device)
                 _out = _context.to(args.device)
@@ -190,7 +190,7 @@ def train_position_classifier(
         os.makedirs(model_path)
 
     resnet.to(args.device)
-    #classifier.to(args.device)
+    classifier.to(args.device)
 
     encoder_optimizer = torch.optim.Adam(
         resnet.parameters(),
@@ -208,73 +208,64 @@ def train_position_classifier(
 
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
-            running_loss, encoder_loss, location_loss, jitter_loss  = 0.0, 0.0, 0.0, 0.0
+            running_loss, encoder_loss, freq_loss  = 0.0, 0.0, 0.0
             running_acc, running_cont = 0.0, 0.0
-            for _data, _target, _freq, _station, _context_label, _context_neighbour, _jittered in tepoch:
+            for _data, _target, _freq,  _context_label, _context_neighbour, _context_frequency in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
 
                 _data = _data.float().to(args.device)
                 _context_neighbour = _context_neighbour.float().to(args.device)
-                #_freq = _freq.to(args.device)
+                _context_frequency = _context_frequency.to(args.device)
                 _context_label= _context_label.to(args.device)
-                _jittered = _jittered.to(args.device)
 
                 encoder_optimizer.zero_grad()
                 classifier_optimizer.zero_grad()
 
-                c = resnet(_data, _context_neighbour)
-                resnet_loss = resnet.loss_function(c, _context_label)['loss']
+                z_data  = resnet.embed(_data)
+                z_neighbour = resnet.embed(_context_neighbour)
+                c_pos = resnet(z_data, z_neighbour)
+                c_freq = classifier(z_data, z_neighbour)
 
-                _z = resnet.embed(_data)
+                location_loss = resnet.loss_function(c_pos, _context_label)['loss']
+                frequency_loss = classifier.loss_function(c_freq, _context_frequency)['loss']
 
-                #c = classifier(_z)
-                classifier_loss = torch.Tensor([0.0])#classifier.loss_function(c, _freq)['loss']
-
-                _z0 = resnet.embed(_jittered)
-                embedding_loss = torch.Tensor([0.0])#100*mse(_z, _z0)
-                
-
-                loss =   resnet_loss #+ 0.00001*torch.sum(torch.square(_z))#classifier_loss +  
+                loss = location_loss + frequency_loss #+ 1.00001*torch.sum(torch.square(_z))#classifier_loss +  
 
                 loss.backward()
                 encoder_optimizer.step()
                 classifier_optimizer.step()
 
                 running_loss += loss.item()
-                encoder_loss += resnet_loss.item()
-                location_loss += classifier_loss.item()
-                jitter_loss += embedding_loss.item()
+                encoder_loss += location_loss.item()
+                freq_loss += frequency_loss.item()
 
+                ##########
                 _data = val_dataset.data.float().to(args.device)
                 _neighbour = val_dataset.context_images_neighbour.float().to(args.device)
+                z_data  = resnet.embed(_data)
+                z_neighbour = resnet.embed(_neighbour)
 
-                c = resnet(_data, _neighbour).cpu().detach()
+                c_pos  = resnet(z_data, z_neighbour).cpu().detach()
                 val_acc_context = torch.sum(
-                    c.argmax(
+                    c_pos.argmax(
                         dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
                 running_acc += val_acc_context
 
-                #z0 = resnet.embed(_data)
-                #c = classifier(z0).cpu().detach()
+                c_freq= classifier(z_data, z_neighbour).cpu().detach()
+                val_acc_freq = torch.sum(
+                    c_freq.argmax(
+                        dim=-1) == val_dataset.context_frequency_neighbour) / val_dataset.context_frequency_neighbour.shape[0]
+                running_cont+= val_acc_freq
 
-                val_acc_freq = torch.Tensor([0.0])#torch.sum(
-                #    c.argmax(
-                #        dim=-1) == val_dataset.frequency_band) / val_dataset.frequency_band.shape[0]
-                running_cont+= 0#val_acc_freq
-                
-
-                tepoch.set_postfix(total_loss=loss.item(), 
-                                   location_loss=resnet_loss.item(), 
-                                   frequency_loss=classifier_loss.item(), 
-                                   jitter_loss=embedding_loss.item(), 
-                                   regularisation=0.00001*torch.sum(torch.square(_z)).cpu().detach().item(),
+                tepoch.set_postfix(total_loss=loss.item(),
+                                   location_loss=location_loss.item(),
+                                   frequency_loss=frequency_loss.item(),
                                    val_acc_freq=val_acc_freq.item(),
                                    val_acc_context=val_acc_context.item())
 
             total_train_loss.append(running_loss / total_step)
             encoder_train_loss.append(encoder_loss / total_step)
-            location_train_loss.append(location_loss / total_step)
-            jitter_train_loss.append(jitter_loss/ total_step)
+            location_train_loss.append(freq_loss / total_step)
 
             validation_accuracies.append(running_acc/ total_step)
             context_accuracies.append(running_cont/ total_step)
@@ -296,22 +287,22 @@ def train_position_classifier(
 
 
                 resnet.eval()
-                #eval_resnet(resnet, train_dataloader, args, epoch=epoch,error='nln')
 
-                Z = resnet.embed(_data).cpu().detach().numpy()
+                Z = z_data.cpu().detach().numpy()  #resnet.embed(_data).cpu().detach().numpy()
                 z = TSNE(n_components=2,
                          learning_rate='auto',
                          init='random',
                          perplexity=30).fit_transform(Z)
 
                 _inputs = _data.cpu().detach().numpy()
+
                 imscatter(z, _inputs, model_path, epoch)
+
             loss_curve(model_path,
                        epoch,
                        total_loss=total_train_loss,
                        location_loss=encoder_train_loss,
                        frequency_loss=location_train_loss,
-                       jitter_loss=jitter_train_loss,
                        validation_accuracy=validation_accuracies,
                        context_accuracies=context_accuracies,
                        descriptor='position')

@@ -49,11 +49,11 @@ def fine_tune(
     total_step = len(train_dataloader)
 
 
-    for epoch in range(1, 31):
+    for epoch in range(1, 51):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
             running_acc = 0.0
-            for _data, _target, _, _, _, _, _ in tepoch:
+            for _data, _target, _, _, _, _ in tepoch:
                 if _data.shape[0] != args.batch_size: continue
                 tepoch.set_description(f"Epoch {epoch}")
 
