@@ -29,7 +29,7 @@ def get_finetune_data(args, transform=None):
                                  train_source,
                                  args,
                                  transform=transform,
-                                 roll=False,
+                                 roll=True,
                                  fine_tune=True)
 
     test_dataset =   LOFARDataset(test_data,
@@ -63,7 +63,7 @@ def get_data(args, transform=None):
                                  train_source[mask],
                                  args,
                                  transform=transform,
-                                 roll=False)
+                                 roll=True)
 
     val_dataset =   LOFARDataset(val_data, 
                                  val_labels, 
@@ -200,18 +200,21 @@ class LOFARDataset(Dataset):
             mask[_normal_samples] = True
 
             if anomaly == 'all':
+                _sum = len(_normal_samples)
                 for a in defaults.anomalies:
-                    temp_indx = [i for i,l in enumerate(self._labels) if a in l]
-                    temp_mask = np.random.choice(temp_indx,
-                                            int(len(_normal_samples)*
-                                                defaults.percentage_comtamination[a]))
+                    if a == 'all': continue
+                    temp_indx = [i for i,l in enumerate(self._labels) if l==a]
+                    temp_mask = np.random.choice(temp_indx, int(len(_normal_samples)*defaults.percentage_comtamination[a]), replace=False)
+                    print(temp_mask)
+                    print(temp_mask.dtype)
                     mask[temp_mask] = True 
             else:
                 temp_indx = [i for i,l in enumerate(self._labels) if anomaly in l]
 
                 temp_mask = np.random.choice(temp_indx,
                                         int(len(_normal_samples)*
-                                            defaults.percentage_comtamination[anomaly]))
+                                            defaults.percentage_comtamination[anomaly]),
+                                        replace=False)
                 mask[temp_mask] = True
         else:
             mask = [True]*len(self._data)
@@ -231,7 +234,14 @@ class LOFARDataset(Dataset):
             None 
         """
 
-        self.anomaly_mask = self.set_percentage_contam(anomaly)
+        assert anomaly in defaults.anomalies or anomaly =='all', "Anomaly not found"
+        if anomaly == 'all':
+            self.anomaly_mask = [True]*len(self._data)
+        else:
+            self.anomaly_mask = [((anomaly in l) | (l == '')) for l in self._labels]
+
+        #self.anomaly_mask = self.set_percentage_contam(anomaly)
+
         self.data = self._data[self.anomaly_mask]
         self.labels = self._labels[self.anomaly_mask]
         self.frequency_band = self._frequency_band[self.anomaly_mask]
