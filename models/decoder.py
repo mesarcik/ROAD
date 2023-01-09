@@ -13,6 +13,7 @@ class Decoder(nn.Module):
         self.patch_size = patch_size
         self.latent_dim = latent_dim
         self.n_layers =  int(np.log2(self.patch_size**2//self.patch_size))
+        print(self.n_layers)
         self.hidden_dims  = [self.patch_size*2**i for i in range(self.n_layers)]
         modules  = []
 
@@ -33,9 +34,7 @@ class Decoder(nn.Module):
             )
 
 
-        self.decoder = nn.Sequential(*modules)
-
-        self.final_layer = nn.Sequential(
+        modules.append(nn.Sequential(
                             nn.ConvTranspose2d(self.hidden_dims[-1],
                                                self.hidden_dims[-1],
                                                kernel_size=3,
@@ -48,7 +47,9 @@ class Decoder(nn.Module):
                             nn.LeakyReLU(),
                             nn.Conv2d(self.hidden_dims[-1], out_channels= self.out_channels,
                                       kernel_size= 3, padding= 1),
-                            nn.Tanh())
+                            nn.Tanh()))
+
+        self.decoder = nn.Sequential(*modules)
 
         self.loss_fn = nn.CrossEntropyLoss()
 
@@ -78,5 +79,4 @@ class Decoder(nn.Module):
                              (int(self.patch_size/2**(len(self.hidden_dims)))),
                              (int(self.patch_size/2**(len(self.hidden_dims)))))
         x = self.decoder(x)
-        x = self.final_layer(x)
         return x

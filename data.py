@@ -29,7 +29,7 @@ def get_finetune_data(args, transform=None):
                                  train_source,
                                  args,
                                  transform=transform,
-                                 roll=True,
+                                 roll=False,
                                  fine_tune=True)
 
     test_dataset =   LOFARDataset(test_data,
@@ -63,7 +63,7 @@ def get_data(args, transform=None):
                                  train_source[mask],
                                  args,
                                  transform=transform,
-                                 roll=True)
+                                 roll=False)
 
     val_dataset =   LOFARDataset(val_data, 
                                  val_labels, 
@@ -274,7 +274,7 @@ class LOFARDataset(Dataset):
         _frequency_band = np.zeros(frequency_band.shape)
 
         for i in range(len(data)):
-            r = np.random.randint(-max_roll,max_roll)
+            r = max_roll#np.random.randint(-max_roll,max_roll)
             _data[i,:] = np.roll(data[i,:], r, axis =1)
             _data[i,:] = np.roll(_data[i,:], r, axis =0)
             _frequency_band[i,:] = np.roll(frequency_band[i,:], r, axis =1)
