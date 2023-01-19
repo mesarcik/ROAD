@@ -100,13 +100,7 @@ def _join(hf:h5py.File, field:str,args)->np.array:
     for a in defaults.anomalies:
         if a != 'all': 
             _data = hf['anomaly_data/{}/{}'.format(a,field)][:]
-            if args.percentage_data > len(_data):
-                a = len(_data)
-            else:
-                a= int(args.percentage_data)
-            mask = np.random.choice(np.arange(len(_data)),a)
-            data = np.concatenate([data,
-                                   _data],axis=0)
+            data = np.concatenate([data,_data],axis=0)
     return data
 
 class LOFARDataset(Dataset):
