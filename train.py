@@ -228,7 +228,7 @@ def train_position_classifier(
 
                 encoder_optimizer.zero_grad()
                 classifier_optimizer.zero_grad()
-                decoder.zero_grad()
+                decoder_optimizer.zero_grad()
 
                 z_data  = resnet.embed(_data)
                 x_hat = decoder(z_data)
