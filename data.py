@@ -17,10 +17,10 @@ def get_finetune_data(args, transform=None):
     (test_data, train_data,
     test_labels, train_labels,
     test_frequency_band, train_frequency_band,
-    test_source, train_source) = train_test_split(_join(hf, 'data', args),
-                                                  _join(hf, 'labels', args).astype(str),
-                                                  _join(hf, 'frequency_band', args),
-                                                  _join(hf, 'source', args).astype(str),
+    test_source, train_source) = train_test_split(_join(hf, 'data'),
+                                                  _join(hf, 'labels').astype(str),
+                                                  _join(hf, 'frequency_band'),
+                                                  _join(hf, 'source').astype(str),
                                                   test_size=0.3,
                                                   random_state=args.seed)
     train_dataset = LOFARDataset(train_data,
@@ -38,13 +38,52 @@ def get_finetune_data(args, transform=None):
                                  test_source,
                                  args,
                                  transform=None,
-                                 fine_tune=True,
-                                 test=True)
+                                 fine_tune=True)
 
     return train_dataset, test_dataset
 
 def get_data(args, transform=None):
+    """
+        Constructs datasets and loaders for training, validation and testing
+        Test data for supervised and unsupervised must be the same
+
+    """
     hf = h5py.File(args.data_path,'r')
+    test_indexes, train_indexes = train_test_split(np.arange(len(_join(hf, 'labels').astype(str))),
+                                                   test_size=0.5,
+                                                   random_state=args.seed)
+
+    _data = _join(hf, 'data')[train_indexes]
+    _labels = _join(hf, 'labels').astype(str)[train_indexes]
+    _frequency_band = _join(hf, 'frequency_band')[train_indexes]
+    _source = _join(hf, 'source').astype(str)[train_indexes]
+
+    (train_data, val_data, 
+    train_labels, val_labels, 
+    train_frequency_band, val_frequency_band,
+    train_source, val_source) = train_test_split(_data,
+                                                 _labels,
+                                                 _frequency_band, 
+                                                 _source,
+                                                 test_size=0.05, 
+                                                 random_state=args.seed)
+
+    supervised_train_dataset = LOFARDataset(train_data, 
+                                 train_labels, 
+                                 train_frequency_band, 
+                                 train_source,
+                                 args,
+                                 transform=transform,
+                                 roll=False,
+                                 supervised=True)
+
+    supervised_val_dataset =   LOFARDataset(val_data, 
+                                 val_labels, 
+                                 val_frequency_band, 
+                                 val_source,
+                                 args,
+                                 transform=None,
+                                 supervised=True)
 
     (train_data, val_data, 
     train_labels, val_labels, 
@@ -55,34 +94,39 @@ def get_data(args, transform=None):
                                                  hf['train_data/source'][:].astype(str),
                                                  test_size=0.05, 
                                                  random_state=args.seed)
-    mask = np.random.choice(np.arange(len(train_labels)),
-                             int(len(train_labels)*1.0))#args.percentage_data))
-    train_dataset = LOFARDataset(train_data[mask], 
-                                 train_labels[mask], 
-                                 train_frequency_band[mask], 
-                                 train_source[mask],
+    train_dataset = LOFARDataset(train_data, 
+                                 train_labels, 
+                                 train_frequency_band, 
+                                 train_source,
                                  args,
                                  transform=transform,
-                                 roll=False)
+                                 roll=False,
+                                 supervised=False)
 
     val_dataset =   LOFARDataset(val_data, 
                                  val_labels, 
                                  val_frequency_band, 
                                  val_source,
                                  args,
-                                 transform=None)
+                                 transform=None,
+                                 supervised=False)
 
-    test_dataset = LOFARDataset(_join(hf, 'data', args),
-                                _join(hf, 'labels', args).astype(str),
-                                _join(hf, 'frequency_band', args),
-                                _join(hf, 'source', args).astype(str),
+    test_dataset = LOFARDataset(_join(hf, 'data')[test_indexes],
+                                _join(hf, 'labels').astype(str)[test_indexes],
+                                _join(hf, 'frequency_band')[test_indexes],
+                                _join(hf, 'source').astype(str)[test_indexes],
                                 args,
                                 transform=None,
-                                test=True)
+                                supervised=False)
+                                
 
-    return train_dataset, val_dataset, test_dataset
+    return (train_dataset, 
+            val_dataset, 
+            test_dataset, 
+            supervised_train_dataset, 
+            supervised_val_dataset)
 
-def _join(hf:h5py.File, field:str,args)->np.array:
+def _join(hf:h5py.File, field:str, compound:bool=False)->np.array:
     """
         Joins together the normal and anomalous testing data
         
@@ -99,7 +143,9 @@ def _join(hf:h5py.File, field:str,args)->np.array:
     data = hf['test_data/{}'.format(field)][:]
     for a in defaults.anomalies:
         if a != 'all': 
-            _data = hf['anomaly_data/{}/{}'.format(a,field)][:]
+            labels = hf['anomaly_data/{}/labels'.format(a)][:].astype(str)
+            mask = [l == a for l in labels]
+            _data = hf['anomaly_data/{}/{}'.format(a,field)][:][mask]
             data = np.concatenate([data,_data],axis=0)
     return data
 
@@ -113,9 +159,9 @@ class LOFARDataset(Dataset):
             transform=None,
             roll=False,
             fine_tune=False,
-            test=False):# set default types
+            supervised=False):# set default types
 
-        self.test = test
+        self.supervised = supervised
 
         if roll:
             _data, _frequency_band = self.circular_shift(data, 
@@ -129,8 +175,12 @@ class LOFARDataset(Dataset):
 
         self.args = args
         self.anomaly_mask = []
+        self.original_anomaly_mask = []
         self.n_patches = int(defaults.SIZE[0]/args.patch_size)
         self._source = np.repeat(source, self.n_patches**2, axis=0)
+
+        self._source_original = source
+        self._labels_original = labels
 
         if fine_tune: 
             self._labels = self.encode_labels(labels)
@@ -142,7 +192,9 @@ class LOFARDataset(Dataset):
 
         data = self.normalise(data)
         self._data = torch.from_numpy(data).permute(0,3,1,2)
+        self._data_original = self._data 
         self._data = self.patch(self._data)
+
 
         self._frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
         self._frequency_band = self.patch(self._frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
@@ -156,64 +208,40 @@ class LOFARDataset(Dataset):
         self.set_anomaly_mask('all')
 
     def __len__(self):
-        return len(self.data)
+        if self.supervised:
+            return len(self.data_original)
+        else:
+            return len(self.data)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        datum = self.data[idx,...]
-        label = self.labels[idx]
-        frequency = self.frequency_band[idx] 
-        context_label = self.context_labels[idx]
-        context_image_neighbour = self.context_images_neighbour[idx]
-        context_frequency_neighbour = self.context_frequency_neighbour[idx]
-
-        if self.transform:
-            datum = self.transform(datum)
-
-        return datum, label, frequency, context_label, context_image_neighbour, context_frequency_neighbour
-
-    def set_percentage_contam(self, anomaly:str)->np.array:
-        """
-            Sets the contamination per anomaly class
-            
-            Parameters
-            ----------
-            anomaly: anomaly class for mask 
-
-            Returns
-            -------
-            None 
-        """
-        assert anomaly in defaults.anomalies or anomaly =='all', "Anomaly not found"
-
-        if self.test:
-            _normal_samples = [i for i,l in enumerate(self._labels) if l == '' ]
-            mask = np.zeros(self._labels.shape, dtype='bool')
-            mask[_normal_samples] = True
-
-            if anomaly == 'all':
-                _sum = len(_normal_samples)
-                for a in defaults.anomalies:
-                    if a == 'all': continue
-                    temp_indx = [i for i,l in enumerate(self._labels) if l==a]
-                    temp_mask = np.random.choice(temp_indx, int(len(_normal_samples)*defaults.percentage_comtamination[a]), replace=False)
-                    print(temp_mask)
-                    print(temp_mask.dtype)
-                    mask[temp_mask] = True 
-            else:
-                temp_indx = [i for i,l in enumerate(self._labels) if anomaly in l]
-
-                temp_mask = np.random.choice(temp_indx,
-                                        int(len(_normal_samples)*
-                                            defaults.percentage_comtamination[anomaly]),
-                                        replace=False)
-                mask[temp_mask] = True
+        if self.supervised:
+            datum = self.data_original[idx]
+            label = self.encode_label(self.labels_original[idx])
+            source = self.source_original[idx]
+            return datum, label, source
         else:
-            mask = [True]*len(self._data)
+            datum = self.data[idx,...]
+            frequency = self.frequency_band[idx] 
+            context_label = self.context_labels[idx]
+            context_image_neighbour = self.context_images_neighbour[idx]
+            context_frequency_neighbour = self.context_frequency_neighbour[idx]
+            label = self.labels[idx]
 
-        return mask
+            if self.transform:
+                datum = self.transform(datum)
+            return datum, label, frequency, context_label, context_image_neighbour, context_frequency_neighbour
+
+
+    def set_supervision(self, supervised:bool)->None:
+        """
+        sets supervision flag
+
+        """
+        self.supervised = supervised
+
 
     def set_anomaly_mask(self, anomaly:str):
         """
@@ -229,6 +257,7 @@ class LOFARDataset(Dataset):
         """
 
         assert anomaly in defaults.anomalies or anomaly =='all', "Anomaly not found"
+
         if anomaly == 'all':
             self.anomaly_mask = [True]*len(self._data)
         else:
@@ -243,6 +272,17 @@ class LOFARDataset(Dataset):
         self.context_labels = self._context_labels[self.anomaly_mask]
         self.context_images_neighbour = self._context_images_neighbour[self.anomaly_mask]
         self.context_frequency_neighbour= self._context_frequency_neighbour[self.anomaly_mask]
+
+
+        if anomaly == 'all':
+            self.original_anomaly_mask = [True]*len(self._data_original)
+        else:
+            self.original_anomaly_mask = [((anomaly in l) | (l == '')) for l in self._labels_original]
+
+
+        self.data_original = self._data_original[self.original_anomaly_mask]
+        self.labels_original = self._labels_original[self.original_anomaly_mask]
+        self.source_original = self._source_original[self.original_anomaly_mask]
 
     def circular_shift(self,
                        data:np.array, 
@@ -276,14 +316,13 @@ class LOFARDataset(Dataset):
         
         return _data, _frequency_band
 
-    def encode_labels(sef, labels):
-        _labels = []
-        for label in labels:
-            if label =='':
-                _labels.append(len(defaults.anomalies))
-            else:
-                _labels.append([i for i,a in enumerate(defaults.anomalies) if a in label][0])
-        return _labels
+    def encode_label(sef, label):
+        
+        if label =='':
+            out = len(defaults.anomalies)
+        else:
+            out = [i for i,a in enumerate(defaults.anomalies) if a in label][0]
+        return out 
 
     def encode_frequencies(self, frequency_band:np.array)->np.array:
         """
