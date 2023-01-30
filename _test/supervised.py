@@ -168,26 +168,42 @@ def eval(resnet:ResNet,
                 'strong_radio_emitter':[],
                 'solar_storm':[]}
 
-    for encoding, anomaly in enumerate(defaults.anomalies):
-        
+    for encoding, anomaly in enumerate([0,1]):#defaults.anomalies
         ground_truth = [t==encoding for t in targets]
+
         precision, recall, thresholds = precision_recall_curve(ground_truth, predictions)
         f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
         auprc = auc(recall, precision)
         print(f'Supervised Class: {encoding} AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
+        precision, recall, thresholds = precision_recall_curve(ground_truth, (predictions)*mask)
+        f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+        auprc = auc(recall, precision)
+        print(f'MASK * Supervised Class: {encoding} AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
-    encoding = len(defaults.anomalies)
+
+    encoding = 1#len(defaults.anomalies)
     ground_truth = [t!=encoding for t in targets]
     precision, recall, thresholds = precision_recall_curve(ground_truth, predictions)
     f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
     auprc = auc(recall, precision)
+    sup_mask = predictions>thresholds[np.argmax(f1_scores)]
     print(f'Supervised, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
     precision, recall, thresholds = precision_recall_curve(ground_truth, mask)
     f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
     auprc = auc(recall, precision)
     print(f'Mask, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, np.logical_and(mask,sup_mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    print(f'Mask AND , Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, np.logical_or(mask,sup_mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    print(f'Mask OR, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
 
 def unsup_detector(test_dataloader, train_dataloader):
@@ -253,7 +269,7 @@ def main():
                                       shuffle=True)
 
         # train model 
-        resnet = ResNet(in_channels = 4, out_dims= len(defaults.anomalies)+1)
+        resnet = ResNet(in_channels = 4, out_dims= 2)
         resnet = train(train_dataloader, supervised_val_dataset, resnet)
         resnet.load_state_dict(torch.load('_test/outputs/resnet/resnet.pt'))
         

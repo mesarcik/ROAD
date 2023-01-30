@@ -144,7 +144,9 @@ def _join(hf:h5py.File, field:str, compound:bool=False)->np.array:
     for a in defaults.anomalies:
         if a != 'all': 
             labels = hf['anomaly_data/{}/labels'.format(a)][:].astype(str)
-            mask = [l == a for l in labels]
+            if not compound: 
+                mask = [l == a for l in labels]
+            else: mask = [True for l in labels]
             _data = hf['anomaly_data/{}/{}'.format(a,field)][:][mask]
             data = np.concatenate([data,_data],axis=0)
     return data
