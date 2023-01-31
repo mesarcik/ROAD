@@ -270,23 +270,24 @@ def main():
 
         # train model 
         resnet = ResNet(in_channels = 4, out_dims= 2)
-        resnet = train(train_dataloader, supervised_val_dataset, resnet)
+        #resnet = train(train_dataloader, supervised_val_dataset, resnet)
         resnet.load_state_dict(torch.load('_test/outputs/resnet/resnet.pt'))
         
         # function that separates anomalies from non-anomnalies using the SSL method
         # we need to tune treshold so that all anmolies are detected
         # returns updated test_dataloader
+        for seed in [1,10,42]:
+            
+            train_dataloader = DataLoader(train_dataset,
+                                          batch_size=args.batch_size,
+                                          shuffle=True)
+            test_dataset.set_seed(seed)
+            test_dataloader = DataLoader(test_dataset,
+                                         batch_size=args.batch_size,
+                                         shuffle=False)
 
-        train_dataloader = DataLoader(train_dataset,
-                                      batch_size=args.batch_size,
-                                      shuffle=True)
-
-        test_dataloader = DataLoader(test_dataset,
-                                     batch_size=args.batch_size,
-                                     shuffle=False)
-
-        mask = unsup_detector(test_dataloader, train_dataloader) 
-        eval(resnet, test_dataloader,mask)
+            mask = unsup_detector(test_dataloader, train_dataloader) 
+            eval(resnet, test_dataloader,mask)
 
         # evaluate performance
         #thresholds = thresholds[:-10]
