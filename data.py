@@ -11,37 +11,6 @@ from utils import args
 from utils.data import defaults
 from utils.data.patches import reconstruct
 
-def get_finetune_data(args, transform=None):
-    hf = h5py.File(args.data_path,'r')
-
-    (test_data, train_data,
-    test_labels, train_labels,
-    test_frequency_band, train_frequency_band,
-    test_source, train_source) = train_test_split(_join(hf, 'data'),
-                                                  _join(hf, 'labels').astype(str),
-                                                  _join(hf, 'frequency_band'),
-                                                  _join(hf, 'source').astype(str),
-                                                  test_size=0.3,
-                                                  random_state=args.seed)
-    train_dataset = LOFARDataset(train_data,
-                                 train_labels,
-                                 train_frequency_band,
-                                 train_source,
-                                 args,
-                                 transform=transform,
-                                 roll=False,
-                                 fine_tune=True)
-
-    test_dataset =   LOFARDataset(test_data,
-                                 test_labels,
-                                 test_frequency_band,
-                                 test_source,
-                                 args,
-                                 transform=None,
-                                 fine_tune=True)
-
-    return train_dataset, test_dataset
-
 def get_data(args, transform=None):
     """
         Constructs datasets and loaders for training, validation and testing
@@ -65,7 +34,7 @@ def get_data(args, transform=None):
                                                  _labels,
                                                  _frequency_band, 
                                                  _source,
-                                                 test_size=0.05, 
+                                                 test_size=0.01, 
                                                  random_state=args.seed)
 
     supervised_train_dataset = LOFARDataset(train_data, 
@@ -73,6 +42,7 @@ def get_data(args, transform=None):
                                  train_frequency_band, 
                                  train_source,
                                  args,
+                                 test=False,
                                  transform=transform,
                                  roll=False,
                                  supervised=True)
@@ -82,6 +52,7 @@ def get_data(args, transform=None):
                                  val_frequency_band, 
                                  val_source,
                                  args,
+                                 test=False,
                                  transform=None,
                                  supervised=True)
 
@@ -99,6 +70,7 @@ def get_data(args, transform=None):
                                  train_frequency_band, 
                                  train_source,
                                  args,
+                                 test=False,
                                  transform=transform,
                                  roll=False,
                                  supervised=False)
@@ -108,6 +80,7 @@ def get_data(args, transform=None):
                                  val_frequency_band, 
                                  val_source,
                                  args,
+                                 test=False,
                                  transform=None,
                                  supervised=False)
 
@@ -116,6 +89,7 @@ def get_data(args, transform=None):
                                 _join(hf, 'frequency_band')[test_indexes],
                                 _join(hf, 'source').astype(str)[test_indexes],
                                 args,
+                                test=True,
                                 transform=None,
                                 supervised=False)
                                 
@@ -158,12 +132,14 @@ class LOFARDataset(Dataset):
             frequency_band:np.array, 
             source:np.array, 
             args:args, 
+            test:bool,
             transform=None,
             roll=False,
-            fine_tune=False,
             supervised=False):# set default types
 
         self.supervised = supervised
+        self.test = test
+        self.test_seed=42
 
         if roll:
             _data, _frequency_band = self.circular_shift(data, 
@@ -179,112 +155,113 @@ class LOFARDataset(Dataset):
         self.anomaly_mask = []
         self.original_anomaly_mask = []
         self.n_patches = int(defaults.SIZE[0]/args.patch_size)
-        self._source = np.repeat(source, self.n_patches**2, axis=0)
-
-        self._source_original = source
-        self._labels_original = labels
-
-        if fine_tune: 
-            self._labels = self.encode_labels(labels)
-            self._labels= np.repeat(self._labels, self.n_patches**2, axis=0)
-            self._labels = torch.from_numpy(self._labels)
-        else:
-            self._labels= np.repeat(labels, self.n_patches**2, axis=0)
-
-
-        data = self.normalise(data)
-        self._data = torch.from_numpy(data).permute(0,3,1,2)
-        self._data_original = self._data 
-        self._data = self.patch(self._data)
-
-
+        
+        self._labels = torch.from_numpy(self.encode_labels(labels))
+        self._source = source
+        self._data = torch.from_numpy(self.normalise(data)).permute(0,3,1,2)
         self._frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
-        self._frequency_band = self.patch(self._frequency_band)[:,0,0,[0,-1]]#use start, end frequencies per patch
-        self._frequency_band = torch.from_numpy(self.encode_frequencies(self._frequency_band.numpy()))
-
-        (self._context_labels, 
-         self._context_images_neighbour,
-         self._context_frequency_neighbour) = self.context_prediction(args)
 
         self.transform=transform 
-        self.set_anomaly_mask('all')
+        self.set_anomaly_mask(-1)
 
     def __len__(self):
-        if self.supervised:
-            return len(self.data_original)
-        else:
-            return len(self.data)
+        return len(self.data)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
         if self.supervised:
-            datum = self.data_original[idx]
-            label = self.encode_label(self.labels_original[idx])
-            source = self.source_original[idx]
-            return datum, label, source
-        else:
-            datum = self.data[idx,...]
-            frequency = self.frequency_band[idx] 
-            context_label = self.context_labels[idx]
-            context_image_neighbour = self.context_images_neighbour[idx]
-            context_frequency_neighbour = self.context_frequency_neighbour[idx]
+            datum = self.data[idx]
             label = self.labels[idx]
+            source = self.source[idx]
+            return datum, label, source
+
+        else:
+            label = np.repeat(self.labels[idx], self.n_patches**2, axis=0)
+            datum =  self.patch(self.data[idx:idx+1,...])
+            frequency = np.random.random(len(label))#self.patch(self._frequency_band[idx])[0,0,[0,-1]]#TODO fix frequncy encoding
+
+            (context_label, 
+             context_image_neighbour,
+             context_frequency_neighbour) = self.context_prediction(datum, args)
 
             if self.transform:
                 datum = self.transform(datum)
+
             return datum, label, frequency, context_label, context_image_neighbour, context_frequency_neighbour
 
 
     def set_supervision(self, supervised:bool)->None:
         """
-        sets supervision flag
-
+            sets supervision flag
         """
         self.supervised = supervised
 
+    def set_seed(self, seed:int)->None:
+        """
+            sets test data seed 
+        """
+        self.test_seed = seed 
 
-    def set_anomaly_mask(self, anomaly:str):
+    def set_anomaly_mask(self, anomaly:int):
         """
             Sets the mask for the dataloader to load only specific classes 
             
             Parameters
             ----------
-            anomaly: anomaly class for mask 
+            anomaly: anomaly class for mask, -1 for all 
 
             Returns
             -------
             None 
         """
 
-        assert anomaly in defaults.anomalies or anomaly =='all', "Anomaly not found"
+        assert anomaly in np.arange(len(defaults.anomalies)) or anomaly == -1, "Anomaly not found"
 
-        if anomaly == 'all':
+        if anomaly == -1:
             self.anomaly_mask = [True]*len(self._data)
         else:
-            self.anomaly_mask = [((anomaly in l) | (l == '')) for l in self._labels]
-
-        #self.anomaly_mask = self.set_percentage_contam(anomaly)
+            self.anomaly_mask = [((anomaly == l) | (l ==len(defaults.anomalies))) for l in self._labels]
 
         self.data = self._data[self.anomaly_mask]
         self.labels = self._labels[self.anomaly_mask]
         self.frequency_band = self._frequency_band[self.anomaly_mask]
         self.source = self._source[self.anomaly_mask]
-        self.context_labels = self._context_labels[self.anomaly_mask]
-        self.context_images_neighbour = self._context_images_neighbour[self.anomaly_mask]
-        self.context_frequency_neighbour= self._context_frequency_neighbour[self.anomaly_mask]
+
+        if self.test:
+            mask = self.subsample(self.labels)
+            self.data = self.data[mask]
+            self.labels = self.labels[mask]
+            self.frequency_band = self.frequency_band[mask]
+            self.source = self.source[mask]
 
 
-        if anomaly == 'all':
-            self.original_anomaly_mask = [True]*len(self._data_original)
-        else:
-            self.original_anomaly_mask = [((anomaly in l) | (l == '')) for l in self._labels_original]
+    def subsample(self, labels:np.array)->np.array:
+        """
+            Subsamples dataset to enforce percentage_comtamination
+            
+            Parameters
+            ----------
+            labels: numpy array containing labels 
+            seed: random seed for sampling 
 
+            Returns
+            -------
+            mask
+        """
 
-        self.data_original = self._data_original[self.original_anomaly_mask]
-        self.labels_original = self._labels_original[self.original_anomaly_mask]
-        self.source_original = self._source_original[self.original_anomaly_mask]
+        np.random.seed(self.test_seed)
+        mask = np.array([],dtype=int)
+        _len_ = len(labels[labels==len(defaults.anomalies)])
+        for i, a in enumerate(defaults.percentage_comtamination):
+            _amount = int(_len_*defaults.percentage_comtamination[a])
+            _indices = [j for j, x in enumerate(labels) if x == i]
+            _indices = np.random.choice(_indices, _amount, replace=False)
+            mask = np.concatenate([mask, _indices],axis=0)
+        mask = np.concatenate([mask, [i for i, x in enumerate(labels) if x == len(defaults.anomalies)]],axis=0)
+
+        return mask
 
     def circular_shift(self,
                        data:np.array, 
@@ -318,13 +295,14 @@ class LOFARDataset(Dataset):
         
         return _data, _frequency_band
 
-    def encode_label(sef, label):
-        
-        if label =='':
-            out = len(defaults.anomalies)
-        else:
-            out = [i for i,a in enumerate(defaults.anomalies) if a in label][0]
-        return out 
+    def encode_labels(self, labels:np.array)->np.array:
+        out = []
+        for label in labels:
+            if label =='':
+                out.append(len(defaults.anomalies))
+            else:
+                out.append([i for i,a in enumerate(defaults.anomalies) if a in label][0])
+        return np.array(out)
 
     def encode_frequencies(self, frequency_band:np.array)->np.array:
         """
@@ -393,12 +371,13 @@ class LOFARDataset(Dataset):
                 self.args.patch_size)
         return patches
 
-    def context_prediction(self, args:args) -> (torch.tensor, torch.tensor, torch.tensor):
+    def context_prediction(self, data:torch.tensor, args:args) -> (torch.tensor, torch.tensor, torch.tensor):
         """
             Arranges a context prediction dataset
             
             Parameters
             ----------
+            data: indexed patched data
             args: cmd arugments
 
             Returns
@@ -407,17 +386,17 @@ class LOFARDataset(Dataset):
 
         """
 
-        context_labels = np.ones([self._data.shape[0]],dtype='int')
-        context_images_neighbour = np.zeros([self._data.shape[0],
-                                             self._data.shape[1],
-                                             args.patch_size, 
-                                             args.patch_size],dtype='float32')
-        context_frequency_neighbour = np.zeros([self._frequency_band.shape[0]],dtype='int')
+        context_labels = np.ones([data.shape[0]],dtype='int')
+        context_images_neighbour = np.zeros([data.shape[0],
+                                             data.shape[1],
+                                             self.args.patch_size, 
+                                             self.args.patch_size],dtype='float32')
+        context_frequency_neighbour = np.zeros([data.shape[0]],dtype='int')
         _indx = 0
         _locations = [-self.n_patches-1, -self.n_patches, -self.n_patches+1, -1, +1, +self.n_patches-1, +self.n_patches, +self.n_patches+1]
 
-        for _image_indx in range(self.n_patches**2, self._data.shape[0]+1,self.n_patches**2):
-            temp_patches = self._data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
+        for _image_indx in range(self.n_patches**2, data.shape[0]+1,self.n_patches**2):
+            temp_patches = data[_image_indx-self.n_patches**2:_image_indx,...] #selects 1 image in patch form has dimensioons (64, 4, 32, 32)
             temp_freq = {0:0, 1:1, 2:2, 
                          3:0,      4:2, 
                          5:0, 6:1, 7:2}

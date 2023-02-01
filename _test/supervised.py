@@ -19,7 +19,7 @@ from eval import  compute_metrics, nln, integrate
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 data_path = '/data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_14-01-23.h5'
 epochs=50
-batch_size=64
+batch_size=32
 
 class Namespace:
     def __init__(self, **kwargs):
@@ -29,7 +29,7 @@ class Namespace:
 
 args = Namespace(device = device,
               latent_dim = 128, 
-              anomaly_class ='all',
+              anomaly_class =-1,
               model='position_classifier',
               amount=6,
               model_name='spirited-impossible-penguin-of-fortitude',
@@ -89,8 +89,6 @@ def train(train_dataloader,
     train_loss, validation_accuracies = [], []
     total_step = len(train_dataloader)
 
-    train_dataloader.dataset.set_supervision(True)
-    val_dataset.set_supervision(True)
     for epoch in range(1, epochs+1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc = 0.0, 0.0
@@ -108,20 +106,17 @@ def train(train_dataloader,
 
                 running_loss += loss.item()
 
-                #_data = val_dataset.data_original.float().to(device)
-                #z = resnet(_data).cpu().detach()
-                #print(z.shape)
-                #print(z.argmax(dim=-1).shape)
-                #print(val_dataset.labels_original.shape)
+                _data = val_dataset.data.float().to(device)
+                z = resnet(_data).cpu().detach()
 
-                #val_acc = torch.sum(
-                #    z.argmax(
-                #       dim=-1) == val_dataset.labels_original) / val_dataset.labels_original.shape[0]
-                #running_acc += val_acc
-                tepoch.set_postfix(loss=loss.item())#, val_acc=val_acc.item())
+                val_acc = torch.sum(
+                    z.argmax(
+                       dim=-1) == val_dataset.labels) / val_dataset.labels.shape[0]
+                running_acc += val_acc
+                tepoch.set_postfix(loss=loss.item(), val_acc=val_acc.item())
 
             train_loss.append(running_loss / total_step)
-            #validation_accuracies.append(running_acc/ total_step)
+            validation_accuracies.append(running_acc/ total_step)
 
             if epoch % 10 == 0:  # TODO: check for model improvement
                 # print validation loss
@@ -132,13 +127,17 @@ def train(train_dataloader,
             loss_curve(model_path,
                        epoch,
                        total_loss=train_loss,
-                       #validation_accuracy=validation_accuracies,
+                       validation_accuracy=validation_accuracies,
                        descriptor='resnet')
             resnet.train()
     return resnet
+def magic_combine(x, dim_begin, dim_end):
+    combined_shape = list(x.shape[:dim_begin]) + [-1] + list(x.shape[dim_end:])
+    return x.view(combined_shape)
 
 def eval(resnet:ResNet,
         test_dataloader:DataLoader,
+        results:dict,
         mask):
 
     resnet.to(device)
@@ -146,7 +145,7 @@ def eval(resnet:ResNet,
 
     predictions, targets  = [], []
     test_dataloader.dataset.set_supervision(True)
-    test_dataloader.dataset.set_anomaly_mask('all')
+    test_dataloader.dataset.set_anomaly_mask(-1)
 
     for _data, _target, _source  in test_dataloader:
         _target = _target.type(torch.LongTensor).to(device)
@@ -160,34 +159,52 @@ def eval(resnet:ResNet,
         targets.extend(target.numpy().flatten())
 
     predictions, targets = np.array(predictions), np.array(targets)
-    # For the null class
-    f1_scores = {'oscillating_tile':[],
-                'real_high_noise':[],
-                'data_loss':[],
-                'lightning':[],
-                'strong_radio_emitter':[],
-                'solar_storm':[]}
 
-    for encoding, anomaly in enumerate([0,1]):#defaults.anomalies
+    for encoding, anomaly in enumerate(defaults.anomalies):
         ground_truth = [t==encoding for t in targets]
 
-        precision, recall, thresholds = precision_recall_curve(ground_truth, predictions)
+        precision, recall, thresholds = precision_recall_curve(ground_truth, predictions==encoding)
         f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
         auprc = auc(recall, precision)
+        results[anomaly]['sup'].append(np.max(f1_scores))
         print(f'Supervised Class: {encoding} AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
-        precision, recall, thresholds = precision_recall_curve(ground_truth, (predictions)*mask)
+        precision, recall, thresholds = precision_recall_curve(ground_truth, (predictions==encoding)*mask)
         f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
         auprc = auc(recall, precision)
+        results[anomaly]['unsup'].append(np.max(f1_scores))
         print(f'MASK * Supervised Class: {encoding} AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+        print('')
 
 
-    encoding = 1#len(defaults.anomalies)
-    ground_truth = [t!=encoding for t in targets]
-    precision, recall, thresholds = precision_recall_curve(ground_truth, predictions)
+    encoding = len(defaults.anomalies)
+    ground_truth = [t==encoding for t in targets]
+    precision, recall, thresholds = precision_recall_curve(ground_truth, predictions==encoding)
     f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
     auprc = auc(recall, precision)
     sup_mask = predictions>thresholds[np.argmax(f1_scores)]
+    results['normal']['sup'].append(np.max(f1_scores))
+    print(f'Supervised, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, np.invert(mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    print(f'Mask, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, (predictions==encoding)*np.invert(mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    results['normal']['unsup'].append(np.max(f1_scores))
+    print(f'MUL, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+
+    encoding = len(defaults.anomalies)
+    ground_truth = [t!=encoding for t in targets]
+    precision, recall, thresholds = precision_recall_curve(ground_truth, predictions!=encoding)
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    sup_mask = predictions!=encoding #>thresholds[np.argmax(f1_scores)]
+    results['anomaly']['sup'].append(np.max(f1_scores))
     print(f'Supervised, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
     precision, recall, thresholds = precision_recall_curve(ground_truth, mask)
@@ -198,13 +215,15 @@ def eval(resnet:ResNet,
     precision, recall, thresholds = precision_recall_curve(ground_truth, np.logical_and(mask,sup_mask))
     f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
     auprc = auc(recall, precision)
+    results['anomaly']['unsup'].append(np.max(f1_scores))
     print(f'Mask AND , Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
     precision, recall, thresholds = precision_recall_curve(ground_truth, np.logical_or(mask,sup_mask))
     f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
     auprc = auc(recall, precision)
     print(f'Mask OR, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
-
+    
+    return results
 
 def unsup_detector(test_dataloader, train_dataloader):
     """
@@ -220,7 +239,7 @@ def unsup_detector(test_dataloader, train_dataloader):
     z_train, x_train = [],[]
     train_dataloader.dataset.set_supervision(False)
     for _data, _target,_,_,_,_  in train_dataloader:
-        _data = _data.float().to(args.device)
+        _data = magic_combine(_data,0,2).float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
         x_train.append(_data.cpu().detach().numpy())
@@ -228,13 +247,13 @@ def unsup_detector(test_dataloader, train_dataloader):
     z_train = np.vstack(z_train) 
     x_train = np.vstack(x_train) 
 
-    anomaly = 'all'
+    anomaly = -1 
     z_test, x_test = [], []
     test_dataloader.dataset.set_anomaly_mask(anomaly)
     test_dataloader.dataset.set_supervision(False)
 
     for _data, _target,_,_,_,_ in test_dataloader:
-        _data = _data.float().to(args.device)
+        _data = magic_combine(_data,0,2).float().to(args.device)
         z = resnet.embed(_data)
         z_test.append(z.cpu().detach().numpy())
         x_test.append(_data.cpu().detach().numpy())
@@ -245,64 +264,86 @@ def unsup_detector(test_dataloader, train_dataloader):
     _D, _I = nln(z_test, z_train, N, args)
     D,I = _D[:,:-1], _I[:,:-1]
     dists = integrate(D,  args)
-    labels =test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2]
-    ground_truth = [l != '' for l in labels]
+    labels =test_dataloader.dataset.labels
+    ground_truth = [l != len(defaults.anomalies) for l in labels]
 
     precision, recall, thresholds = precision_recall_curve(ground_truth, dists)
     f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
     auprc = auc(recall, precision)
-    print(f'SSL: AUPRC {auprc}, F1 {np.max(f1_scores)}')
-
+    #print(f'SSL: AUPRC {auprc}, F1 {np.max(f1_scores)}')
+    #TODO this threhsold maximises anommalous class detection and not normal class
+    # Maybe i need to investigate how to more appropriately set this threhold. 
     return dists>thresholds[np.argmax(f1_scores)]
 
-def main():
-    for i,seed in enumerate([200]):
-        
-        (train_dataset, 
-        val_dataset, 
-        test_dataset, 
-        supervised_train_dataset, 
-        supervised_val_dataset) = get_data(args)   
+def plot(results):
+    pos = np.arange(len(results))
+    width = 0.3
+    fig, ax = plt.subplots()
+    supmean, supstd = [], []
+    unsupmean, unsupstd = [], []
+    for i,k in enumerate(results.keys()):
+        supmean.append(np.mean(results[k]['sup']))
+        supstd.append(np.std(results[k]['sup']))
+        unsupmean.append(np.mean(results[k]['unsup']))
+        unsupstd.append(np.std(results[k]['unsup']))
+    
+    
+    ax.bar(pos, supmean, yerr=supstd, width=width, label ='sup')
+    ax.bar(pos+width, unsupmean, yerr=unsupstd, width=width, label ='unsup')
+    
+    ax.set_xticks(pos, list(results.keys()), rotation = 10)
+    
+    plt.legend()
+    plt.xlabel('Classes')
+    plt.ylabel('F1 Score')
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(f'/tmp/temp',dpi=300)
+    plt.close('all')
 
-        train_dataloader = DataLoader(supervised_train_dataset,
+def main():
+    (train_dataset, 
+    val_dataset, 
+    test_dataset, 
+    supervised_train_dataset, 
+    supervised_val_dataset) = get_data(args)   
+
+    supervised_train_dataloader = DataLoader(supervised_train_dataset,
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
+
+    # train model 
+    resnet = ResNet(in_channels = 4, out_dims= len(defaults.anomalies)+1)
+    resnet = train(supervised_train_dataloader, supervised_val_dataset, resnet)
+    resnet.load_state_dict(torch.load('_test/outputs/resnet/resnet.pt'))
+    
+    # function that separates anomalies from non-anomnalies using the SSL method
+    # we need to tune treshold so that all anmolies are detected
+    # returns updated test_dataloader
+    # For the null class
+    results = {
+                'normal':{'sup':[],'unsup':[]},
+                'anomaly':{'sup':[], 'unsup':[]},
+                'oscillating_tile':{'sup':[],'unsup':[]}, #[],
+                'real_high_noise':{'sup':[],'unsup':[]},
+                'data_loss':{'sup':[],'unsup':[]},
+                'lightning':{'sup':[],'unsup':[]},
+                'strong_radio_emitter':{'sup':[],'unsup':[]},
+                'solar_storm':{'sup':[],'unsup':[]},
+                }
+    for seed in [1,10,42, 98, 102,4, 2, 101, 33]:
+        print('')
+        train_dataloader = DataLoader(train_dataset,
                                       batch_size=args.batch_size,
                                       shuffle=True)
+        test_dataset.set_seed(seed)
+        test_dataloader = DataLoader(test_dataset,
+                                     batch_size=args.batch_size,
+                                     shuffle=False)
 
-        # train model 
-        resnet = ResNet(in_channels = 4, out_dims= 2)
-        #resnet = train(train_dataloader, supervised_val_dataset, resnet)
-        resnet.load_state_dict(torch.load('_test/outputs/resnet/resnet.pt'))
-        
-        # function that separates anomalies from non-anomnalies using the SSL method
-        # we need to tune treshold so that all anmolies are detected
-        # returns updated test_dataloader
-        for seed in [1,10,42]:
-            
-            train_dataloader = DataLoader(train_dataset,
-                                          batch_size=args.batch_size,
-                                          shuffle=True)
-            test_dataset.set_seed(seed)
-            test_dataloader = DataLoader(test_dataset,
-                                         batch_size=args.batch_size,
-                                         shuffle=False)
-
-            mask = unsup_detector(test_dataloader, train_dataloader) 
-            eval(resnet, test_dataloader,mask)
-
-        # evaluate performance
-        #thresholds = thresholds[:-10]
-        #vals = np.zeros([len(f1_scores.keys()), len(thresholds)])
-        #for i,k in enumerate(f1_scores.keys()):
-        #    plt.plot(thresholds, f1_scores[k], label=k)
-        #    vals[i] = f1_scores[k]
-
-        #plt.plot(thresholds, np.mean(vals,axis=0), label='mean')
-        #plt.xlabel('Thresholds')
-        #plt.ylabel('F1 Score')
-        #plt.legend()
-        #plt.grid()
-        #plt.savefig(f'/tmp/temp_{seed}',dpi=200)
-        #plt.close('all')
+        mask = unsup_detector(test_dataloader, train_dataloader) 
+        results = eval(resnet, test_dataloader, results, mask)
+    plot(results)
 
 
 if __name__ == '__main__':
