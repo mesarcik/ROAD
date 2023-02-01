@@ -1,23 +1,44 @@
 import torch
 from torch import nn
-from torchvision import transforms, models
+import torchvision 
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 from utils.data import defaults
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_recall_curve, auc
+import models
 import h5py 
 import os
+from data import get_data
 
 from utils.vis import loss_curve
-from eval import  compute_metrics
+from eval import  compute_metrics, nln, integrate
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-data_path = '/data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_16-12-22.h5'
-epochs=100
-batch_size=128
+data_path = '/data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_14-01-23.h5'
+epochs=50
+batch_size=32
 
+class Namespace:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+    def set_amount(self, amount):
+        self.amount = amount
+
+args = Namespace(device = device,
+              latent_dim = 128, 
+              anomaly_class =-1,
+              model='position_classifier',
+              amount=6,
+              model_name='spirited-impossible-penguin-of-fortitude',
+              limit='None',
+              data_path =data_path,
+              patch_size=64,
+              seed=42,
+              batch_size=batch_size,
+              neighbours=[5])
 # get model 
 class ResNet(nn.Module):
     def __init__(self,in_channels: int, out_dims: int,  **kwargs) -> None:
@@ -26,7 +47,7 @@ class ResNet(nn.Module):
         self.in_channels = in_channels
 
         # embedding 
-        self.resnet = models.resnet50(weights=None)
+        self.resnet = torchvision.models.resnet50(weights=None)
         self.resnet.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                  kernel_size=(7, 7), 
                                  stride=(2, 2), 
@@ -53,80 +74,10 @@ class ResNet(nn.Module):
         """
         return {"loss": self.loss_fn(c, labels)}
 
-# get data 
-class LOFARDataset(Dataset):
-    def __init__(self,data:np.array,labels:np.array):# set default types
 
-        self.labels = self.encode_labels(labels)
-        self.labels = torch.from_numpy(self.labels)
-
-        data = self.normalise(data)
-        self.data = torch.from_numpy(data).permute(0,3,1,2)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        datum = self.data[idx,...]
-        label = self.labels[idx]
-
-        return datum, label
-
-
-    def encode_labels(sef, labels):
-        _labels = []
-        for label in labels:
-            if label =='':
-                _labels.append(len(defaults.anomalies))
-            else:
-                _labels.append([i for i,a in enumerate(defaults.anomalies) if a in label][0])
-        return np.array(_labels)
-
-    def normalise(self, data:np.array)->np.array:
-        """
-            perpendicular polarisation normalisation
-
-        """
-        _data = np.zeros(data.shape)
-        for i, spec in enumerate(data):
-            for pol in range(data.shape[-1]):
-                _min, _max = np.percentile(spec[...,pol], [1,97])
-                temp = np.clip(spec[...,pol],_min, _max)
-                temp = np.log(temp)
-                temp  = (temp - np.min(temp)) / (np.max(temp) - np.min(temp))
-                _data[i,...,pol] = temp
-        _data = np.nan_to_num(_data, 0)
-        return _data
-            
-def _join(hf:h5py.File, field:str)->np.array:
-    """
-        Joins together the normal and anomalous testing data
-        
-        Parameters
-        ----------
-        hf: h5py dataset 
-        field: the field that is meant to be concatenated along 
-
-        Returns
-        -------
-        data: concatenated array
-
-    """
-    test_data = hf['test_data/{}'.format(field)][:]
-    train_data = hf['train_data/{}'.format(field)][:]
-    data = np.concatenate([test_data, train_data], axis=0)
-    for a in defaults.anomalies:
-        if a != 'all': 
-            _data = hf['anomaly_data/{}/{}'.format(a,field)][:]
-            data = np.concatenate([_data, data],axis=0)
-    return data
-
-def train(train_dataloader: DataLoader, 
-          val_dataset: LOFARDataset,
-          resnet:ResNet):
+def train(train_dataloader, 
+          val_dataset,
+          resnet):
 
     model_path = '_test/outputs/resnet'
 
@@ -141,7 +92,7 @@ def train(train_dataloader: DataLoader,
     for epoch in range(1, epochs+1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc = 0.0, 0.0
-            for _data, _target  in tepoch:
+            for _data, _target, _source  in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 _target = _target.type(torch.LongTensor).to(device)
                 _data = _data.type(torch.FloatTensor).to(device)
@@ -160,7 +111,7 @@ def train(train_dataloader: DataLoader,
 
                 val_acc = torch.sum(
                     z.argmax(
-                        dim=-1) == val_dataset.labels) / val_dataset.labels.shape[0]
+                       dim=-1) == val_dataset.labels) / val_dataset.labels.shape[0]
                 running_acc += val_acc
                 tepoch.set_postfix(loss=loss.item(), val_acc=val_acc.item())
 
@@ -180,15 +131,23 @@ def train(train_dataloader: DataLoader,
                        descriptor='resnet')
             resnet.train()
     return resnet
+def magic_combine(x, dim_begin, dim_end):
+    combined_shape = list(x.shape[:dim_begin]) + [-1] + list(x.shape[dim_end:])
+    return x.view(combined_shape)
 
-def eval(resnet:ResNet,test_dataloader:DataLoader):
+def eval(resnet:ResNet,
+        test_dataloader:DataLoader,
+        results:dict,
+        mask):
 
     resnet.to(device)
     resnet.eval()
 
     predictions, targets  = [], []
+    test_dataloader.dataset.set_supervision(True)
+    test_dataloader.dataset.set_anomaly_mask(-1)
 
-    for _data, _target in test_dataloader:
+    for _data, _target, _source  in test_dataloader:
         _target = _target.type(torch.LongTensor).to(device)
         _data = _data.type(torch.FloatTensor).to(device)
 
@@ -200,59 +159,191 @@ def eval(resnet:ResNet,test_dataloader:DataLoader):
         targets.extend(target.numpy().flatten())
 
     predictions, targets = np.array(predictions), np.array(targets)
-    # For the null class
-    encoding = len(defaults.anomalies)
-    auroc, auprc, f1 = compute_metrics(targets,
-                                       predictions==encoding, 
-                                       anomaly=encoding, 
-                                       multiclass=True)
-    print("Anomaly:{},  AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format('normal',
-                                                                                  auroc,
-                                                                                  auprc,
-                                                                                  f1))
 
     for encoding, anomaly in enumerate(defaults.anomalies):
-        if anomaly =='all': continue
+        ground_truth = [t==encoding for t in targets]
 
-        auroc, auprc, f1 = compute_metrics(targets,
-                                           predictions==encoding,
-                                           anomaly=encoding,
-                                           multiclass=True)
+        precision, recall, thresholds = precision_recall_curve(ground_truth, predictions==encoding)
+        f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+        auprc = auc(recall, precision)
+        results[anomaly]['sup'].append(np.max(f1_scores))
+        print(f'Supervised Class: {encoding} AUPRC: {auprc}, F1: {np.max(f1_scores)}')
 
-        print("Anomaly:{},  AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(anomaly,
-                                                                              auroc,
-                                                                              auprc,
-                                                                              f1))
+        precision, recall, thresholds = precision_recall_curve(ground_truth, (predictions==encoding)*mask)
+        f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+        auprc = auc(recall, precision)
+        results[anomaly]['unsup'].append(np.max(f1_scores))
+        print(f'MASK * Supervised Class: {encoding} AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+        print('')
 
+
+    encoding = len(defaults.anomalies)
+    ground_truth = [t==encoding for t in targets]
+    precision, recall, thresholds = precision_recall_curve(ground_truth, predictions==encoding)
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    sup_mask = predictions>thresholds[np.argmax(f1_scores)]
+    results['normal']['sup'].append(np.max(f1_scores))
+    print(f'Supervised, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, np.invert(mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    print(f'Mask, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, (predictions==encoding)*np.invert(mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    results['normal']['unsup'].append(np.max(f1_scores))
+    print(f'MUL, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+
+    encoding = len(defaults.anomalies)
+    ground_truth = [t!=encoding for t in targets]
+    precision, recall, thresholds = precision_recall_curve(ground_truth, predictions!=encoding)
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    sup_mask = predictions!=encoding #>thresholds[np.argmax(f1_scores)]
+    results['anomaly']['sup'].append(np.max(f1_scores))
+    print(f'Supervised, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, mask)
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    print(f'Mask, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, np.logical_and(mask,sup_mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    results['anomaly']['unsup'].append(np.max(f1_scores))
+    print(f'Mask AND , Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, np.logical_or(mask,sup_mask))
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    print(f'Mask OR, Class: {encoding}, AUPRC: {auprc}, F1: {np.max(f1_scores)}')
+    
+    return results
+
+def unsup_detector(test_dataloader, train_dataloader):
+    """
+        Separates anomalies from normal behaviour 
+    """
+
+    resnet = models.ResNet(out_dims=8,in_channels=4, latent_dim=128)
+    resnet.load_state_dict(torch.load(f'outputs/position_classifier/{args.model_name}/resnet.pt'))
+    resnet.to(args.device)
+    resnet.eval()
+
+
+    z_train, x_train = [],[]
+    train_dataloader.dataset.set_supervision(False)
+    for _data, _target,_,_,_,_  in train_dataloader:
+        _data = magic_combine(_data,0,2).float().to(args.device)
+        z = resnet.embed(_data)
+        z_train.append(z.cpu().detach().numpy())
+        x_train.append(_data.cpu().detach().numpy())
+
+    z_train = np.vstack(z_train) 
+    x_train = np.vstack(x_train) 
+
+    anomaly = -1 
+    z_test, x_test = [], []
+    test_dataloader.dataset.set_anomaly_mask(anomaly)
+    test_dataloader.dataset.set_supervision(False)
+
+    for _data, _target,_,_,_,_ in test_dataloader:
+        _data = magic_combine(_data,0,2).float().to(args.device)
+        z = resnet.embed(_data)
+        z_test.append(z.cpu().detach().numpy())
+        x_test.append(_data.cpu().detach().numpy())
+
+    z_test, x_test = np.vstack(z_test), np.vstack(x_test)
+
+    N = int(np.max(args.neighbours))
+    _D, _I = nln(z_test, z_train, N, args)
+    D,I = _D[:,:-1], _I[:,:-1]
+    dists = integrate(D,  args)
+    labels =test_dataloader.dataset.labels
+    ground_truth = [l != len(defaults.anomalies) for l in labels]
+
+    precision, recall, thresholds = precision_recall_curve(ground_truth, dists)
+    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
+    auprc = auc(recall, precision)
+    #print(f'SSL: AUPRC {auprc}, F1 {np.max(f1_scores)}')
+    #TODO this threhsold maximises anommalous class detection and not normal class
+    # Maybe i need to investigate how to more appropriately set this threhold. 
+    return dists>thresholds[np.argmax(f1_scores)]
+
+def plot(results):
+    pos = np.arange(len(results))
+    width = 0.3
+    fig, ax = plt.subplots()
+    supmean, supstd = [], []
+    unsupmean, unsupstd = [], []
+    for i,k in enumerate(results.keys()):
+        supmean.append(np.mean(results[k]['sup']))
+        supstd.append(np.std(results[k]['sup']))
+        unsupmean.append(np.mean(results[k]['unsup']))
+        unsupstd.append(np.std(results[k]['unsup']))
+    
+    
+    ax.bar(pos, supmean, yerr=supstd, width=width, label ='sup')
+    ax.bar(pos+width, unsupmean, yerr=unsupstd, width=width, label ='unsup')
+    
+    ax.set_xticks(pos, list(results.keys()), rotation = 10)
+    
+    plt.legend()
+    plt.xlabel('Classes')
+    plt.ylabel('F1 Score')
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(f'/tmp/temp',dpi=300)
+    plt.close('all')
 
 def main():
-    hf = h5py.File(data_path,'r')
+    (train_dataset, 
+    val_dataset, 
+    test_dataset, 
+    supervised_train_dataset, 
+    supervised_val_dataset) = get_data(args)   
 
-    (test_data, train_data,
-    test_labels, train_labels) = train_test_split(_join(hf, 'data'),
-                                                  _join(hf, 'labels').astype(str),
-                                                  test_size=0.5,
-                                                  random_state=42)
-
-    (train_data, val_data, 
-    train_labels, val_labels) = train_test_split(train_data,
-                                                 train_labels,
-                                                 test_size=0.05, 
-                                                 random_state=42)
-
-    train_dataset = LOFARDataset(train_data, train_labels)
-    val_dataset =   LOFARDataset(val_data, val_labels)
-    test_dataset = LOFARDataset(test_data, test_labels)
-
-    train_dataloader = DataLoader(train_dataset,batch_size=batch_size,shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    supervised_train_dataloader = DataLoader(supervised_train_dataset,
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
 
     # train model 
     resnet = ResNet(in_channels = 4, out_dims= len(defaults.anomalies)+1)
-    resnet = train(train_dataloader, val_dataset, resnet)
-    #resnet.load_state_dict(torch.load('_test/outputs/resnet/resnet.pt'))
-    # evaluate performance
-    eval(resnet, test_dataloader)
+    resnet = train(supervised_train_dataloader, supervised_val_dataset, resnet)
+    resnet.load_state_dict(torch.load('_test/outputs/resnet/resnet.pt'))
+    
+    # function that separates anomalies from non-anomnalies using the SSL method
+    # we need to tune treshold so that all anmolies are detected
+    # returns updated test_dataloader
+    # For the null class
+    results = {
+                'normal':{'sup':[],'unsup':[]},
+                'anomaly':{'sup':[], 'unsup':[]},
+                'oscillating_tile':{'sup':[],'unsup':[]}, #[],
+                'real_high_noise':{'sup':[],'unsup':[]},
+                'data_loss':{'sup':[],'unsup':[]},
+                'lightning':{'sup':[],'unsup':[]},
+                'strong_radio_emitter':{'sup':[],'unsup':[]},
+                'solar_storm':{'sup':[],'unsup':[]},
+                }
+    for seed in [1,10,42, 98, 102,4, 2, 101, 33]:
+        print('')
+        train_dataloader = DataLoader(train_dataset,
+                                      batch_size=args.batch_size,
+                                      shuffle=True)
+        test_dataset.set_seed(seed)
+        test_dataloader = DataLoader(test_dataset,
+                                     batch_size=args.batch_size,
+                                     shuffle=False)
+
+        mask = unsup_detector(test_dataloader, train_dataloader) 
+        results = eval(resnet, test_dataloader, results, mask)
+    plot(results)
 
 
 if __name__ == '__main__':

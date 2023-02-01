@@ -9,7 +9,7 @@ anomalies = [
     'solar_storm']
 percentage_comtamination = {'oscillating_tile':0.01,
                             'real_high_noise':0.13,
-                            'electric_fence':0.01,
+                            #'electric_fence':0.01,
                             'data_loss':0.06,
                             'lightning':0.05,
                             'strong_radio_emitter':0.2,

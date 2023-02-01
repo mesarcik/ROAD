@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from models import VAE
+from models import VAE, Decoder
 from sklearn.manifold import TSNE
 from tqdm import tqdm
 import os
@@ -189,8 +189,11 @@ def train_position_classifier(
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
+    decoder = Decoder(out_channels=4, patch_size=args.patch_size, latent_dim=args.latent_dim)
+
     resnet.to(args.device)
-    classifier.to(args.device)
+    #classifier.to(args.device)
+    decoder.to(args.device)
 
     encoder_optimizer = torch.optim.Adam(
         resnet.parameters(),
@@ -200,6 +203,11 @@ def train_position_classifier(
         classifier.parameters(),
         lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
 
+    decoder_optimizer = torch.optim.Adam(
+        decoder.parameters(),
+        lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
+
+
     mse = nn.MSELoss()
 
     total_train_loss, encoder_train_loss, location_train_loss, dist_train_loss, jitter_train_loss  = [], [], [], [],[]
@@ -208,7 +216,7 @@ def train_position_classifier(
 
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
-            running_loss, encoder_loss, freq_loss  = 0.0, 0.0, 0.0
+            running_loss, encoder_loss, freq_loss, d_loss  = 0.0, 0.0, 0.0, 0.0
             running_acc, running_cont = 0.0, 0.0
             for _data, _target, _freq,  _context_label, _context_neighbour, _context_frequency in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
@@ -220,24 +228,29 @@ def train_position_classifier(
 
                 encoder_optimizer.zero_grad()
                 classifier_optimizer.zero_grad()
+                decoder_optimizer.zero_grad()
 
                 z_data  = resnet.embed(_data)
+                x_hat = decoder(z_data)
                 z_neighbour = resnet.embed(_context_neighbour)
                 c_pos = resnet(z_data, z_neighbour)
-                c_freq = classifier(z_data, z_neighbour)
+                #c_freq = classifier(z_data, z_neighbour)
 
                 location_loss = resnet.loss_function(c_pos, _context_label)['loss']
-                frequency_loss = classifier.loss_function(c_freq, _context_frequency)['loss']
+                #frequency_loss = classifier.loss_function(c_freq, _context_frequency)['loss']
+                decoder_loss = mse(_context_neighbour, x_hat)
 
-                loss = location_loss + frequency_loss #+ 1.00001*torch.sum(torch.square(_z))#classifier_loss +  
+                loss = location_loss + decoder_loss #+ 1.00001*torch.sum(torch.square(_z))#classifier_loss +  
 
                 loss.backward()
                 encoder_optimizer.step()
-                classifier_optimizer.step()
+                #classifier_optimizer.step()
+                decoder_optimizer.step()
 
                 running_loss += loss.item()
                 encoder_loss += location_loss.item()
-                freq_loss += frequency_loss.item()
+                #freq_loss += frequency_loss.item()
+                d_loss += decoder_loss.item()
 
                 ##########
                 _data = val_dataset.data.float().to(args.device)
@@ -251,31 +264,32 @@ def train_position_classifier(
                         dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
                 running_acc += val_acc_context
 
-                c_freq= classifier(z_data, z_neighbour).cpu().detach()
-                val_acc_freq = torch.sum(
-                    c_freq.argmax(
-                        dim=-1) == val_dataset.context_frequency_neighbour) / val_dataset.context_frequency_neighbour.shape[0]
-                running_cont+= val_acc_freq
+                #c_freq= classifier(z_data, z_neighbour).cpu().detach()
+                #val_acc_freq = torch.sum(
+                #    c_freq.argmax(
+                #        dim=-1) == val_dataset.context_frequency_neighbour) / val_dataset.context_frequency_neighbour.shape[0]
+                #running_cont+= val_acc_freq
 
                 tepoch.set_postfix(total_loss=loss.item(),
                                    location_loss=location_loss.item(),
-                                   frequency_loss=frequency_loss.item(),
-                                   val_acc_freq=val_acc_freq.item(),
+                                   #frequency_loss=frequency_loss.item(),
+                                   decoder_loss=decoder_loss.item(),
+                                   #val_acc_freq=val_acc_freq.item(),
                                    val_acc_context=val_acc_context.item())
 
             total_train_loss.append(running_loss / total_step)
             encoder_train_loss.append(encoder_loss / total_step)
-            location_train_loss.append(freq_loss / total_step)
+            #location_train_loss.append(freq_loss / total_step)
 
             validation_accuracies.append(running_acc/ total_step)
-            context_accuracies.append(running_cont/ total_step)
+            #context_accuracies.append(running_cont/ total_step)
 
             if epoch % 50 == 0:  # TODO: check for model improvement
                 # print validation loss
 
                 torch.save(
-                    classifier.state_dict(),
-                    '{}/classifier.pt'.format(model_path))
+                    decoder.state_dict(),
+                    '{}/decoder.pt'.format(model_path))
                 
                 torch.save(
                     resnet.state_dict(),
@@ -302,9 +316,9 @@ def train_position_classifier(
                        epoch,
                        total_loss=total_train_loss,
                        location_loss=encoder_train_loss,
-                       frequency_loss=location_train_loss,
+                       #frequency_loss=location_train_loss,
                        validation_accuracy=validation_accuracies,
-                       context_accuracies=context_accuracies,
+                       #context_accuracies=context_accuracies,
                        descriptor='position')
             classifier.train()
             resnet.train()
