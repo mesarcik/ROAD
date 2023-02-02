@@ -231,14 +231,14 @@ class LOFARDataset(Dataset):
 
 
         if anomaly == -1:
-            self.anomaly_mask = [True]*len(self._data)
+            self.anomaly_mask = [True]*len(self.data)
         else:
-            self.anomaly_mask = [((anomaly == l) | (l ==len(defaults.anomalies))) for l in self._labels]
+            self.anomaly_mask = [((anomaly == l) | (l ==len(defaults.anomalies))) for l in self.labels]
 
-        self.data = self._data[self.anomaly_mask]
-        self.labels = self._labels[self.anomaly_mask]
-        self.frequency_band = self._frequency_band[self.anomaly_mask]
-        self.source = self._source[self.anomaly_mask]
+        self.data = self.data[self.anomaly_mask]
+        self.labels = self.labels[self.anomaly_mask]
+        self.frequency_band = self.frequency_band[self.anomaly_mask]
+        self.source = self.source[self.anomaly_mask]
 
     def subsample(self, labels:np.array)->np.array:
         """
