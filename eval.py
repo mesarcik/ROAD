@@ -2,6 +2,7 @@ import torch
 import faiss
 import numpy as np
 import gc
+import copy
 from torch.utils.data import DataLoader
 from models import VAE, ResNet, ClassificationHead
 from utils import args
@@ -226,12 +227,14 @@ def eval_resnet(resnet:ResNet,
 
     z_train = np.vstack(z_train) 
     x_train = np.vstack(x_train) 
-
-    for __count__, anomaly in enumerate(defaults.anomalies):
+    
+    anomalies = list(np.arange(len(defaults.anomalies)))
+    anomalies.append(-1)
+    for anomaly in anomalies:
         gc.collect()
         z_test, x_test = [], []
-        print(f'anomaly={anomaly}',__count__)
-        test_dataloader.dataset.set_anomaly_mask(__count__)
+        print(f'anomaly={anomaly}')
+        test_dataloader.dataset.set_anomaly_mask(anomaly)
 
         for _data, _target, _freq, _station, _context,_ in test_dataloader:
             _data = combine(_data,0,2).float().to(args.device)
