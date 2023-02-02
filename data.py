@@ -184,7 +184,7 @@ class LOFARDataset(Dataset):
 
             (context_label, 
              context_image_neighbour,
-             context_frequency_neighbour) = self.context_prediction(datum, args)
+             context_frequency_neighbour) = self.context_prediction(datum)
 
             if self.transform:
                 datum = self.transform(datum)
@@ -219,6 +219,17 @@ class LOFARDataset(Dataset):
 
         assert anomaly in np.arange(len(defaults.anomalies)) or anomaly == -1, "Anomaly not found"
 
+        if self.test:
+            subsample_mask = self.subsample(self._labels)
+        else:
+            subsample_mask = [True]*len(self._data)
+
+        self.data = self._data[subsample_mask]
+        self.labels = self._labels[subsample_mask]
+        self.frequency_band = self._frequency_band[subsample_mask]
+        self.source = self._source[subsample_mask]
+
+
         if anomaly == -1:
             self.anomaly_mask = [True]*len(self._data)
         else:
@@ -228,14 +239,6 @@ class LOFARDataset(Dataset):
         self.labels = self._labels[self.anomaly_mask]
         self.frequency_band = self._frequency_band[self.anomaly_mask]
         self.source = self._source[self.anomaly_mask]
-
-        if self.test:
-            mask = self.subsample(self.labels)
-            self.data = self.data[mask]
-            self.labels = self.labels[mask]
-            self.frequency_band = self.frequency_band[mask]
-            self.source = self.source[mask]
-
 
     def subsample(self, labels:np.array)->np.array:
         """
@@ -261,7 +264,7 @@ class LOFARDataset(Dataset):
             mask = np.concatenate([mask, _indices],axis=0)
         mask = np.concatenate([mask, [i for i, x in enumerate(labels) if x == len(defaults.anomalies)]],axis=0)
 
-        return mask
+        return mask.astype(int)
 
     def circular_shift(self,
                        data:np.array, 
@@ -371,14 +374,13 @@ class LOFARDataset(Dataset):
                 self.args.patch_size)
         return patches
 
-    def context_prediction(self, data:torch.tensor, args:args) -> (torch.tensor, torch.tensor, torch.tensor):
+    def context_prediction(self, data:torch.tensor) -> (torch.tensor, torch.tensor, torch.tensor):
         """
             Arranges a context prediction dataset
             
             Parameters
             ----------
             data: indexed patched data
-            args: cmd arugments
 
             Returns
             -------

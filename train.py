@@ -8,6 +8,7 @@ from torch import nn
 
 
 from utils.args import args
+from utils.data import combine
 from utils.vis import imscatter, io, loss_curve
 from eval import eval_resnet
 
@@ -42,9 +43,9 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
-            for _data, _target, _freq, _context, _, _ in tepoch:
+            for _data, _, _, _, _, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
-                _data = _data.float().to(args.device)
+                _data = combine(_data,0,2).float().to(args.device)
                 optimizer.zero_grad()
 
                 [_decoded, _input, _mu, _log_var] = vae(_data)
@@ -115,7 +116,7 @@ def train_resnet(
             running_loss, running_acc = 0.0, 0.0
             for _data, _target, _freq, _context, _, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
-                _data = _data.float().to(args.device)
+                _data = combine(_data,0,2).float().to(args.device)
                 _out = _context.to(args.device)
 
                 optimizer.zero_grad()
@@ -190,6 +191,7 @@ def train_position_classifier(
         os.makedirs(model_path)
 
     decoder = Decoder(out_channels=4, patch_size=args.patch_size, latent_dim=args.latent_dim)
+    decoder.load_state_dict(torch.load('outputs/position_classifier/{}/decoder.pt'.format(args.model_name)))
 
     resnet.to(args.device)
     #classifier.to(args.device)
@@ -213,6 +215,7 @@ def train_position_classifier(
     total_train_loss, encoder_train_loss, location_train_loss, dist_train_loss, jitter_train_loss  = [], [], [], [],[]
     validation_accuracies, context_accuracies = [], []
     total_step = len(train_dataloader)
+    prev_acc = 0
 
     for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
@@ -221,10 +224,10 @@ def train_position_classifier(
             for _data, _target, _freq,  _context_label, _context_neighbour, _context_frequency in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
 
-                _data = _data.float().to(args.device)
-                _context_neighbour = _context_neighbour.float().to(args.device)
-                _context_frequency = _context_frequency.to(args.device)
-                _context_label= _context_label.to(args.device)
+                _data = combine(_data,0,2).float().to(args.device)
+                _context_neighbour = combine(_context_neighbour,0,2).float().to(args.device)
+                _context_frequency= combine(_context_frequency,0,2).to(args.device)
+                _context_label= combine(_context_label,0,2).to(args.device)
 
                 encoder_optimizer.zero_grad()
                 classifier_optimizer.zero_grad()
@@ -253,15 +256,18 @@ def train_position_classifier(
                 d_loss += decoder_loss.item()
 
                 ##########
-                _data = val_dataset.data.float().to(args.device)
-                _neighbour = val_dataset.context_images_neighbour.float().to(args.device)
+                _data = val_dataset.patch(val_dataset.data)
+                _labels, _neighbour, _freq = val_dataset.context_prediction(_data)
+                _data = _data.float().to(args.device)
+
+                _neighbour = _neighbour.float().to(args.device)
                 z_data  = resnet.embed(_data)
                 z_neighbour = resnet.embed(_neighbour)
 
                 c_pos  = resnet(z_data, z_neighbour).cpu().detach()
                 val_acc_context = torch.sum(
                     c_pos.argmax(
-                        dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
+                        dim=-1) == _labels) / _labels.shape[0]
                 running_acc += val_acc_context
 
                 #c_freq= classifier(z_data, z_neighbour).cpu().detach()
@@ -286,18 +292,19 @@ def train_position_classifier(
 
             if epoch % 50 == 0:  # TODO: check for model improvement
                 # print validation loss
+                if val_acc_context>prev_acc:
+                    prev_acc = val_acc_context
+                    torch.save(
+                        decoder.state_dict(),
+                        '{}/decoder.pt'.format(model_path))
+                    
+                    torch.save(
+                        resnet.state_dict(),
+                        '{}/resnet.pt'.format(model_path))
 
-                torch.save(
-                    decoder.state_dict(),
-                    '{}/decoder.pt'.format(model_path))
-                
-                torch.save(
-                    resnet.state_dict(),
-                    '{}/resnet.pt'.format(model_path))
-
-                with open('{}/model.config'.format(model_path), 'w') as fp:
-                    for arg in args.__dict__:
-                        fp.write('{}: {}\n'.format(arg, args.__dict__[arg]))
+                    with open('{}/model.config'.format(model_path), 'w') as fp:
+                        for arg in args.__dict__:
+                            fp.write('{}: {}\n'.format(arg, args.__dict__[arg]))
 
 
                 resnet.eval()

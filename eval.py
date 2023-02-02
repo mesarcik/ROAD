@@ -9,8 +9,7 @@ from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
 from utils.vis import io, nln_io
 from data import get_data
-from utils.data import defaults
-from utils.data.patches import reconstruct, reconstruct_distances
+from utils.data import defaults, combine, reconstruct, reconstruct_distances
 
 def nln(z_test:np.array, 
         z_train:np.array, 
@@ -97,7 +96,7 @@ def compute_metrics(labels:np.array, pred:np.array, anomaly:int=0, multiclass=Fa
     if multiclass:
         _ground_truth = [l == anomaly for l in labels]
     else:
-        _ground_truth = [l != '' for l in labels]
+        _ground_truth = [l != len(defaults.anomalies) for l in labels]
 
     fpr,tpr, thr = roc_curve(_ground_truth, pred)
     auroc = auc(fpr, tpr)
@@ -145,7 +144,7 @@ def eval_vae(vae:VAE,
     z_train = np.vstack(z_train) 
     x_hat_train = np.vstack(x_hat_train)
     
-    defaults.anomalies.append('all')
+    defaults.anomalies.append(-1)
     for anomaly in defaults.anomalies:
         gc.collect()
         z_test= []
@@ -153,7 +152,7 @@ def eval_vae(vae:VAE,
         test_dataloader.dataset.set_anomaly_mask(anomaly)
 
         for _data, _target, _freq, _station, _context, _ in test_dataloader:
-            _data = _data.float().to(args.device)
+            _data = combine(_data,0,2).float().to(args.device)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
             x_hat_test.append(_decoded.cpu().detach().numpy())
@@ -165,7 +164,7 @@ def eval_vae(vae:VAE,
                 # build a flat (CPU) index
                 D, I = nln(z_test, z_train, N, args)
                 dists = integrate(D, args)
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels,
                                                     dists)
 
                 print("N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(N, auroc, auprc, f1))
@@ -181,7 +180,7 @@ def eval_vae(vae:VAE,
         elif error == 'recon':
             error = (x_hat_test - test_dataloader.dataset.data.numpy())**2
             error = integrate(error, args)
-            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
+            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels,
                                                 error)
 
             print("AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(auroc, auprc, f1))
@@ -220,7 +219,7 @@ def eval_resnet(resnet:ResNet,
     
     z_train, x_train = [],[]
     for _data, _target, _freq, _station, _context,_  in train_dataloader:
-        _data = _data.float().to(args.device)
+        _data = combine(_data,0,2).float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
         x_train.append(_data.cpu().detach().numpy())
@@ -228,14 +227,14 @@ def eval_resnet(resnet:ResNet,
     z_train = np.vstack(z_train) 
     x_train = np.vstack(x_train) 
 
-    defaults.anomalies.append('all')
     for __count__, anomaly in enumerate(defaults.anomalies):
         gc.collect()
         z_test, x_test = [], []
-        test_dataloader.dataset.set_anomaly_mask(anomaly)
+        print(f'anomaly={anomaly}',__count__)
+        test_dataloader.dataset.set_anomaly_mask(__count__)
 
         for _data, _target, _freq, _station, _context,_ in test_dataloader:
-            _data = _data.float().to(args.device)
+            _data = combine(_data,0,2).float().to(args.device)
             z = resnet.embed(_data)
             z_test.append(z.cpu().detach().numpy())
             x_test.append(_data.cpu().detach().numpy())
@@ -262,7 +261,7 @@ def eval_resnet(resnet:ResNet,
             nln_io(5, 
                 x_recon, 
                 neighbours_recon,
-                test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
+                test_dataloader.dataset.labels,
                 D,
                 'outputs/{}/{}'.format(args.model, args.model_name),
                 args.epochs, 
@@ -273,8 +272,7 @@ def eval_resnet(resnet:ResNet,
                 D,I = _D[:,:n], _I[:,:n]
                 dists = integrate(D,  args)
 
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels[::int(defaults.SIZE[0]//args.patch_size)**2], 
-                                                    dists)
+                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, dists)
 
                 print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(args.epochs,
                                                                                         n,
@@ -289,87 +287,3 @@ def eval_resnet(resnet:ResNet,
                         auroc=auroc, 
                         auprc=auprc, 
                         f1_score=f1)
-def eval_finetune(resnet:ResNet,
-                  classification_head:ClassificationHead,
-                  test_dataloader: DataLoader,
-                  args,
-                  epochs:int=-1,
-                  plot:bool=True)->None:
-    """
-        Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types
-        and writes them to file
-
-        Parameters
-        ----------
-        resnet : trained Resnet on the cpu
-        classification_head: multiclass classifier
-        train_dataloader: Dataloader for the training data
-        args: args
-        error: calculation method used for Resnet ~ ('nln')
-
-        Returns
-        -------
-        None
-    """
-    resnet.to(args.device)
-    resnet.eval()
-    classification_head.to(args.device)
-    classification_head.eval()
-
-    predictions, targets  = [], []
-
-    for _data, _target, _, _, _, _ in test_dataloader:
-        _target = _target.type(torch.LongTensor).to(args.device)
-        _data = _data.type(torch.FloatTensor).to(args.device)
-
-        _z = resnet.embed(_data)
-        _z = _z.view(_z.shape[0]//(defaults.SIZE[0]//args.patch_size)**2,
-                        ((defaults.SIZE[0]//args.patch_size)**2)*args.latent_dim)
-        c = classification_head(_z)
-        c = c.argmax(dim=-1).cpu().detach()
-        target = _target[::(defaults.SIZE[0]//args.patch_size)**2].cpu().detach()
-
-        predictions.extend(c.numpy().flatten())
-        targets.extend(target.numpy().flatten())
-
-    predictions, targets = np.array(predictions), np.array(targets)
-    # For the null class
-    encoding = len(defaults.anomalies)
-    auroc, auprc, f1 = compute_metrics(targets,
-                                       predictions==encoding, 
-                                       anomaly=encoding, 
-                                       multiclass=True)
-    print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format('normal',
-                                                                                  args.epochs,
-                                                                                  auroc,
-                                                                                  auprc,
-                                                                                  f1))
-
-    save_results(args,
-        anomaly='normal',
-        epoch=args.epochs,
-        neighbour=-1,
-        auroc=auroc,
-        auprc=auprc,
-        f1_score=f1)
-
-    for encoding, anomaly in enumerate(defaults.anomalies):
-        if anomaly =='all': continue
-
-        auroc, auprc, f1 = compute_metrics(targets,
-                                           predictions==encoding,
-                                           anomaly=encoding,
-                                           multiclass=True)
-
-        print("Anomaly:{}, Epoch {}: AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(anomaly,
-                                                                                      args.epochs,
-                                                                                      auroc,
-                                                                                      auprc,
-                                                                                      f1))
-        save_results(args,
-            anomaly=anomaly,
-            epoch=args.epochs,
-            neighbour=-1,
-            auroc=auroc,
-            auprc=auprc,
-            f1_score=f1)

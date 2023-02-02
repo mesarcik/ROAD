@@ -2,6 +2,25 @@ import numpy as np
 import torch
 from utils import args 
 
+
+def combine(x:torch.tensor, dim_begin:int, dim_end:int)->torch.tensor:
+    """
+        Joins together axis from dim_begin to dim_end
+
+        Parameters
+        ----------
+        x: tensor to be joined
+        dim_begin: start dimensions 
+        dim_end: end dimensions 
+
+        Returns
+        -------
+        combined tensor
+
+    """
+    combined_shape = list(x.shape[:dim_begin]) + [-1] + list(x.shape[dim_end:])
+    return x.view(combined_shape)
+
 def reconstruct_distances(distances:np.array, args:args):
     """
         Reconstruct distance vector to original dimensions when using patches

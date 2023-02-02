@@ -4,7 +4,7 @@ import torchvision
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-from utils.data import defaults
+from utils.data import defaults, combine
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_recall_curve, auc
@@ -131,9 +131,6 @@ def train(train_dataloader,
                        descriptor='resnet')
             resnet.train()
     return resnet
-def magic_combine(x, dim_begin, dim_end):
-    combined_shape = list(x.shape[:dim_begin]) + [-1] + list(x.shape[dim_end:])
-    return x.view(combined_shape)
 
 def eval(resnet:ResNet,
         test_dataloader:DataLoader,
@@ -239,7 +236,7 @@ def unsup_detector(test_dataloader, train_dataloader):
     z_train, x_train = [],[]
     train_dataloader.dataset.set_supervision(False)
     for _data, _target,_,_,_,_  in train_dataloader:
-        _data = magic_combine(_data,0,2).float().to(args.device)
+        _data = combine(_data,0,2).float().to(args.device)
         z = resnet.embed(_data)
         z_train.append(z.cpu().detach().numpy())
         x_train.append(_data.cpu().detach().numpy())
@@ -253,7 +250,7 @@ def unsup_detector(test_dataloader, train_dataloader):
     test_dataloader.dataset.set_supervision(False)
 
     for _data, _target,_,_,_,_ in test_dataloader:
-        _data = magic_combine(_data,0,2).float().to(args.device)
+        _data = combine(_data,0,2).float().to(args.device)
         z = resnet.embed(_data)
         z_test.append(z.cpu().detach().numpy())
         x_test.append(_data.cpu().detach().numpy())

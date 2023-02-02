@@ -10,11 +10,10 @@ from utils.data import defaults
 import os
 import gc
 
-from data import get_data, get_finetune_data
+from data import get_data
 from models import VAE, ResNet, PositionClassifier, Decoder, ClassificationHead
 from train import train_vae, train_resnet, train_position_classifier
-from eval import eval_vae, eval_resnet, eval_finetune
-from fine_tune import fine_tune
+from eval import eval_vae, eval_resnet
 
 
 def main():
@@ -24,7 +23,7 @@ def main():
                 #                    transforms.RandomHorizontalFlip(p=0.5),
                 #                    transforms.RandomVerticalFlip(p=0.5),
                 #                    ])
-    train_dataset, val_dataset, test_dataset = get_data(args,transform=transform)
+    (train_dataset, val_dataset, test_dataset, _, _) = get_data(args, transform=transform)   
 
     train_dataloader = DataLoader(train_dataset,
                                   batch_size=args.batch_size,
@@ -61,32 +60,6 @@ def main():
         else:
             resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
         eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
-
-        if args.fine_tune:
-            del train_dataset 
-            del train_dataloader
-            del test_dataset
-            del test_dataloader
-            gc.collect()
-            train_dataset, test_dataset = get_finetune_data(args,transform=transform)
-            train_dataloader = DataLoader(train_dataset,
-                                          batch_size=args.batch_size,
-                                          shuffle=False)
-        
-            test_dataloader = DataLoader(test_dataset,
-                                         batch_size=args.batch_size,
-                                         shuffle=False)
-            classification_head = ClassificationHead(out_dims=len(defaults.anomalies)+1,
-                                                     hidden_dims=[args.latent_dim*(defaults.SIZE[0]//(args.patch_size))**2,
-                                                     int(0.25*args.latent_dim*(defaults.SIZE[0]//(args.patch_size))**2),
-                                                     int(0.0625*args.latent_dim*(defaults.SIZE[0]//(args.patch_size))**2)])
-            if args.load_model:
-                classification_head.load_state_dict(torch.load('outputs/position_classifier/{}/classification_head.pt'.format(args.model_name)))
-            else:
-                classification_head = fine_tune(train_dataloader, test_dataloader, resnet, classification_head, args)
-            eval_finetune(resnet, classification_head, test_dataloader, args, args.epochs)
-
-
 
 if __name__ == '__main__':
     main()
