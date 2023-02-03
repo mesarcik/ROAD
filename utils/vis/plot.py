@@ -65,7 +65,7 @@ def nln_io(n_plots:int,
     if not os.path.exists(_dir):
         os.makedirs(_dir)
 
-    for _ in tqdm(range(10)):
+    for _ in range(10):
         i = np.random.randint(len(x_test))
 
         while labels[i] == '':
