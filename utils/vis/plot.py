@@ -2,8 +2,8 @@ import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import numpy as np
+import pandas as pd
 import os
-from tqdm import tqdm
 
 def imscatter(z:np.array, inputs:np.array, path:str, epoch:int, ax=None, zoom=1)->None:
     """
@@ -100,4 +100,29 @@ def loss_curve(path:str,epoch:int, **kwargs)->None:
 
     plt.savefig('{}/loss_{}'.format(path,str(kwargs['descriptor'])),dpi=99)
 
+    plt.close('all')
+
+def plot_results(result_path:str, save_path:str, model_name:str, neighbours:int):
+    """
+        reads in results and plots them
+    """
+    df = pd.read_csv(result_path)
+    df = df[(df.Name == model_name) &
+            (df.Neighbour == neighbours)]
+
+    values = df.groupby(['Class']).agg(['mean','std'])['F1'].reset_index()
+
+    pos = np.arange(len(values))
+    width = 0.3
+    fig, ax = plt.subplots()
+
+    ax.bar(pos, values['mean'].values, yerr=values['std'].values, width=width, label ='SSL')
+    ax.set_xticks(pos, list(pd.unique(df.Class)), rotation = 10)
+
+    plt.legend()
+    plt.xlabel('Classes')
+    plt.ylabel('F1 Score')
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(f'{save_path}/f1_scores',dpi=300)
     plt.close('all')

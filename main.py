@@ -14,6 +14,7 @@ from data import get_data
 from models import VAE, ResNet, PositionClassifier, Decoder, ClassificationHead
 from train import train_vae, train_resnet, train_position_classifier
 from eval import eval_vae, eval_resnet
+from utils import plot_results
 
 
 def main():
@@ -59,7 +60,16 @@ def main():
             classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))
         else:
             resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
-        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
+
+        for i in range(10):
+            test_dataloader.dataset.set_seed(np.random.randint(100))
+            eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
+        plot_results(args.output_path,
+                    f'outputs/{args.model}/{args.model_name}',  
+                    args.model_name,
+                    np.max(args.neighbours))
+
+
 
 if __name__ == '__main__':
     main()
