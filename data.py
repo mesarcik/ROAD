@@ -11,7 +11,7 @@ from utils import args
 from utils.data import defaults
 from utils.data.patches import reconstruct
 
-def get_data(args, transform=None):
+def get_data(args, remove=None, transform=None):
     """
         Constructs datasets and loaders for training, validation and testing
         Test data for supervised and unsupervised must be the same
@@ -34,7 +34,7 @@ def get_data(args, transform=None):
                                                  _labels,
                                                  _frequency_band, 
                                                  _source,
-                                                 test_size=0.01, 
+                                                 test_size=0.02, 
                                                  random_state=args.seed)
 
     supervised_train_dataset = LOFARDataset(train_data, 
@@ -44,6 +44,7 @@ def get_data(args, transform=None):
                                  args,
                                  test=False,
                                  transform=transform,
+                                 remove=remove,
                                  roll=False,
                                  supervised=True)
 
@@ -54,6 +55,7 @@ def get_data(args, transform=None):
                                  args,
                                  test=False,
                                  transform=None,
+                                 remove=remove,
                                  supervised=True)
 
     (train_data, val_data, 
@@ -73,6 +75,7 @@ def get_data(args, transform=None):
                                  test=False,
                                  transform=transform,
                                  roll=False,
+                                 remove=None,
                                  supervised=False)
 
     val_dataset =   LOFARDataset(val_data, 
@@ -82,6 +85,7 @@ def get_data(args, transform=None):
                                  args,
                                  test=False,
                                  transform=None,
+                                 remove=None,
                                  supervised=False)
 
     test_dataset = LOFARDataset(_join(hf, 'data')[test_indexes],
@@ -91,6 +95,7 @@ def get_data(args, transform=None):
                                 args,
                                 test=True,
                                 transform=None,
+                                remove=None,
                                 supervised=False)
                                 
 
@@ -134,12 +139,14 @@ class LOFARDataset(Dataset):
             args:args, 
             test:bool,
             transform=None,
+            remove=None,
             roll=False,
             supervised=False):# set default types
 
         self.supervised = supervised
         self.test = test
         self.test_seed=42
+        self.remove=remove
 
         if roll:
             _data, _frequency_band = self.circular_shift(data, 
@@ -150,6 +157,12 @@ class LOFARDataset(Dataset):
             labels = np.concatenate([labels, labels],axis=0)
             source = np.concatenate([source, source],axis=0)
             
+        if remove is not None:
+            mask = labels!=remove
+            labels = labels[mask]
+            source = source[mask]
+            data = data[mask]
+            frequency_band = frequency_band[mask]
 
         self.args = args
         self.anomaly_mask = []
@@ -198,6 +211,20 @@ class LOFARDataset(Dataset):
         """
         self.supervised = supervised
 
+    def remove_sources(self, remove):
+        """
+            removes data corresponding source
+        """
+        _, _, indxs = np.intersect1d(remove, self._source, assume_unique=True, return_indices=True)
+        mask = [i not in indxs for i in range(len(self._source))]
+        self._data = self._data[mask]
+        self._labels = self._labels[mask]
+        self._frequency_band = self._frequency_band[mask]
+        self._source = self._source[mask]
+        self.set_anomaly_mask(-1)
+        
+
+
     def set_seed(self, seed:int)->None:
         """
             sets test data seed 
@@ -219,10 +246,10 @@ class LOFARDataset(Dataset):
 
         assert anomaly in np.arange(len(defaults.anomalies)) or anomaly == -1, "Anomaly not found"
 
-        if self.test:
-            subsample_mask = self.subsample(self._labels)
-        else:
-            subsample_mask = [True]*len(self._data)
+        #if self.test:
+        #    subsample_mask = self.subsample(self._labels)
+        #else:
+        subsample_mask = [True]*len(self._data)
 
         self.data = self._data[subsample_mask]
         self.labels = self._labels[subsample_mask]

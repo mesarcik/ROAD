@@ -1,24 +1,29 @@
 import torch
 from torchvision import models
 from torch import nn
+import os
 
 class ClassificationHead(nn.Module):
-    def __init__(self,out_dims: int, hidden_dims: list, **kwargs) -> None:
+    def __init__(self,out_dims: int, latent_dim: int, **kwargs) -> None:
         super(ClassificationHead, self).__init__()
         self.out_dims =  out_dims
-        self.hidden_dims = hidden_dims 
 
         # classifier  
         modules  = []
+        modules.append(nn.Linear(16*8, 64)) 
+        modules.append(nn.LeakyReLU())
 
-        for i, h in enumerate(self.hidden_dims):
-            if i >= len(self.hidden_dims)-1: break
-            modules.append(nn.Linear(h, self.hidden_dims[i+1]))
-            modules.append(nn.LeakyReLU(0.1))
-            modules.append(nn.BatchNorm1d(num_features=self.hidden_dims[i+1]))
+        modules.append(nn.Linear(64, 32)) 
+        modules.append(nn.LeakyReLU())
 
-        modules.append(nn.Linear(self.hidden_dims[-1], 
-                                 self.out_dims))
+        modules.append(nn.Linear(32, 16)) 
+        modules.append(nn.LeakyReLU())
+
+        modules.append(nn.Linear(16, 8)) 
+        modules.append(nn.LeakyReLU())
+
+        modules.append(nn.Linear(8, out_dims))
+        modules.append(nn.Sigmoid())
 
         self.classifier = nn.Sequential(*modules)
 
@@ -40,7 +45,6 @@ class ClassificationHead(nn.Module):
 
     def save(self, name):
         fpath = self.fpath_from_name(name)
-        makedirpath(fpath)
         torch.save(self.state_dict(), fpath)
 
     def load(self, name):
@@ -48,4 +52,4 @@ class ClassificationHead(nn.Module):
         self.load_state_dict(torch.load(fpath))
 
     def fpath_from_name(self, name):
-        return f'ckpts/{name}/position_classifier.pkl'
+        return f'outputs/position_classifier/{name}/classification_head.pkl'
