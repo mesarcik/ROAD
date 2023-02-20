@@ -12,12 +12,14 @@ class Decoder(nn.Module):
         self.out_channels = out_channels
         self.patch_size = patch_size
         self.latent_dim = latent_dim
-        self.n_layers =  int(np.log2(self.patch_size**2//self.patch_size))
-        print(self.n_layers)
-        self.hidden_dims  = [self.patch_size*2**i for i in range(self.n_layers)]
+        self.n_layers =  3#int(np.log2(self.patch_size**2//self.patch_size))
+        #self.hidden_dims  = [self.patch_size*2**i for i in range(self.n_layers)]
+        self.hidden_dims  = [2**(2+i) for i in range(self.n_layers)]
         modules  = []
 
-        self.decoder_input = nn.Linear(self.latent_dim, self.patch_size)
+        self.intermediate = self.patch_size//2**self.n_layers
+        self.decoder_input = nn.Linear(self.latent_dim, self.hidden_dims[0]*(self.intermediate**2))
+        #self.decoder_input = nn.Linear(self.latent_dim, self.patch_size)
 
         
         for i in range(self.n_layers - 1):
@@ -75,8 +77,6 @@ class Decoder(nn.Module):
     def forward(self, input:torch.tensor):
 
         x = self.decoder_input(input)
-        x = x.view(-1, self.hidden_dims[0],
-                             (int(self.patch_size/2**(len(self.hidden_dims)))),
-                             (int(self.patch_size/2**(len(self.hidden_dims)))))
+        x = x.view(-1, self.hidden_dims[0], self.intermediate, self.intermediate)
         x = self.decoder(x)
         return x
