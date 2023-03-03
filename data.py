@@ -246,10 +246,10 @@ class LOFARDataset(Dataset):
 
         assert anomaly in np.arange(len(defaults.anomalies)) or anomaly == -1, "Anomaly not found"
 
-        #if self.test:
-        #    subsample_mask = self.subsample(self._labels)
-        #else:
-        subsample_mask = [True]*len(self._data)
+        if self.test:
+            subsample_mask = self.subsample(self._labels)
+        else:
+            subsample_mask = [True]*len(self._data)
 
         self.data = self._data[subsample_mask]
         self.labels = self._labels[subsample_mask]
