@@ -33,7 +33,7 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
-    vae.to(args.device)
+    vae.to(args.device, dtype=torch.bfloat16)
     optimizer = torch.optim.Adam(
         vae.parameters(),
         lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
@@ -45,7 +45,7 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
             running_loss = 0.0
             for _data, _, _, _, _, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
-                _data = combine(_data,0,2).float().to(args.device)
+                _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
                 optimizer.zero_grad()
 
                 [_decoded, _input, _mu, _log_var] = vae(_data)
@@ -104,7 +104,7 @@ def train_resnet(
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
-    resnet.to(args.device)
+    resnet.to(args.device, dtype=torch.bfloat16)
     optimizer = torch.optim.Adam(
         resnet.parameters(),
         lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
@@ -116,7 +116,7 @@ def train_resnet(
             running_loss, running_acc = 0.0, 0.0
             for _data, _target, _freq, _context, _, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
-                _data = combine(_data,0,2).float().to(args.device)
+                _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
                 _out = _context.to(args.device)
 
                 optimizer.zero_grad()
@@ -128,7 +128,7 @@ def train_resnet(
 
                 running_loss += loss.item()
 
-                _data = val_dataset.data.float().to(args.device)
+                _data = val_dataset.data.float().to(args.device, dtype=torch.bfloat16)
                 z = resnet(_data).cpu().detach()
 
                 val_acc = torch.sum(
@@ -191,11 +191,11 @@ def train_position_classifier(
         os.makedirs(model_path)
 
     decoder = Decoder(out_channels=4, patch_size=args.patch_size, latent_dim=args.latent_dim)
-    decoder.load_state_dict(torch.load('outputs/position_classifier/{}/decoder.pt'.format(args.model_name)))
+    #decoder.load_state_dict(torch.load('outputs/position_classifier/{}/decoder.pt'.format(args.model_name)))
 
-    resnet.to(args.device)
+    resnet.to(args.device, dtype=torch.bfloat16)
     #classifier.to(args.device)
-    decoder.to(args.device)
+    decoder.to(args.device, dtype=torch.bfloat16)
 
     encoder_optimizer = torch.optim.Adam(
         resnet.parameters(),
@@ -224,24 +224,26 @@ def train_position_classifier(
             for _data, _target, _freq,  _context_label, _context_neighbour, _context_frequency in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
 
-                _data = combine(_data,0,2).float().to(args.device)
-                _context_neighbour = combine(_context_neighbour,0,2).float().to(args.device)
-                _context_frequency= combine(_context_frequency,0,2).to(args.device)
-                _context_label= combine(_context_label,0,2).to(args.device)
+                _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
+                _context_neighbour = combine(_context_neighbour,0,2).float().to(args.device, dtype=torch.bfloat16)
+                _context_frequency= combine(_context_frequency,0,2).to(args.device, dtype=torch.bfloat16)
+                _context_label= combine(_context_label,0,2).to(args.device, dtype=torch.long)
 
                 encoder_optimizer.zero_grad()
                 classifier_optimizer.zero_grad()
                 decoder_optimizer.zero_grad()
 
                 z_data  = resnet.embed(_data)
-                x_hat = decoder(z_data)
+                hat_data = decoder(z_data)
                 z_neighbour = resnet.embed(_context_neighbour)
+                hat_neighbour = decoder(z_neighbour)
                 c_pos = resnet(z_data, z_neighbour)
                 #c_freq = classifier(z_data, z_neighbour)
 
                 location_loss = resnet.loss_function(c_pos, _context_label)['loss']
                 #frequency_loss = classifier.loss_function(c_freq, _context_frequency)['loss']
-                decoder_loss = mse(_context_neighbour, x_hat)
+                decoder_loss = mse(_context_neighbour, hat_neighbour) + mse(_data, hat_data)
+                #decoder_loss = mse(_data, hat_neighbour) + mse(_context_neighbour, hat_data)
 
                 loss = location_loss + decoder_loss #+ 1.00001*torch.sum(torch.square(_z))#classifier_loss +  
 
@@ -258,9 +260,9 @@ def train_position_classifier(
                 ##########
                 _data = val_dataset.patch(val_dataset.data)
                 _labels, _neighbour, _freq = val_dataset.context_prediction(_data)
-                _data = _data.float().to(args.device)
+                _data = _data.float().to(args.device, dtype=torch.bfloat16)
 
-                _neighbour = _neighbour.float().to(args.device)
+                _neighbour = _neighbour.float().to(args.device, dtype=torch.bfloat16)
                 z_data  = resnet.embed(_data)
                 z_neighbour = resnet.embed(_neighbour)
 
@@ -296,28 +298,28 @@ def train_position_classifier(
                     prev_acc = val_acc_context
                     torch.save(
                         decoder.state_dict(),
-                        '{}/decoder.pt'.format(model_path))
+                        '{}/decoder_{}.pt'.format(model_path,epoch))
                     
                     torch.save(
                         resnet.state_dict(),
-                        '{}/resnet.pt'.format(model_path))
+                        '{}/resnet_{}.pt'.format(model_path,epoch))
 
                     with open('{}/model.config'.format(model_path), 'w') as fp:
                         for arg in args.__dict__:
                             fp.write('{}: {}\n'.format(arg, args.__dict__[arg]))
 
 
-                resnet.eval()
+                #resnet.eval()
 
-                Z = z_data.cpu().detach().numpy()  #resnet.embed(_data).cpu().detach().numpy()
-                z = TSNE(n_components=2,
-                         learning_rate='auto',
-                         init='random',
-                         perplexity=30).fit_transform(Z)
+                #Z = z_data.cpu().detach().float().numpy()  #resnet.embed(_data).cpu().detach().numpy()
+                #z = TSNE(n_components=2,
+                #         learning_rate='auto',
+                #         init='random',
+                #         perplexity=30).fit_transform(Z)
 
-                _inputs = _data.cpu().detach().numpy()
+                #_inputs = _data.cpu().detach().numpy().float()
 
-                imscatter(z, _inputs, model_path, epoch)
+                #imscatter(z, _inputs, model_path, epoch)
 
             loss_curve(model_path,
                        epoch,

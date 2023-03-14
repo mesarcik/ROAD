@@ -3,7 +3,6 @@ anomalies = [
     'oscillating_tile',
     #'real_high_noise',
     'first_order_high_noise',
-    #'third_order_high_noise',
     #'electric_fence',
     'first_order_data_loss',
     'third_order_data_loss',
@@ -13,6 +12,7 @@ anomalies = [
     'source_in_sidelobes',
     #'ionosphere',
     'solar_storm']
+
 percentage_comtamination = {'oscillating_tile':0.04,
                             #'real_high_noise':0.13,
                             'first_order_high_noise':0.06,
@@ -25,7 +25,7 @@ percentage_comtamination = {'oscillating_tile':0.04,
                             #'strong_radio_emitter':0.1,
                             'galactic_plane':0.1,
                             'source_in_sidelobes':0.1,
-                            #'ionosphere':0.1,
+                            'ionosphere':0.1,
                             'solar_storm':0.07}
 default_stations = [
     'CS001HBA0',

@@ -131,13 +131,13 @@ def eval_vae(vae:VAE,
         -------
         None
     """
-    vae.to(args.device)
+    vae.to(args.device, dtype=torch.bfloat16)
     vae.eval()
     
     z_train = []
     x_hat_train = []
     for _data, _target, _freq, _station, _context,_ in train_dataloader:
-        _data = _data.float().to(args.device)
+        _data = _data.float().to(args.device, dtype=torch.bfloat16)
         [_decoded, _input, _mu, _log_var] = vae(_data)
         z_train.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
         x_hat_train.append(_decoded.cpu().detach().numpy())
@@ -153,7 +153,7 @@ def eval_vae(vae:VAE,
         test_dataloader.dataset.set_anomaly_mask(anomaly)
 
         for _data, _target, _freq, _station, _context, _ in test_dataloader:
-            _data = combine(_data,0,2).float().to(args.device)
+            _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
             [_decoded, _input, _mu, _log_var] = vae(_data)
             z_test.append(vae.reparameterize(_mu, _log_var).cpu().detach().numpy())
             x_hat_test.append(_decoded.cpu().detach().numpy())
@@ -215,15 +215,15 @@ def eval_resnet(resnet:ResNet,
         -------
         None
     """
-    resnet.to(args.device)
+    resnet.to(args.device, dtype=torch.bfloat16)
     resnet.eval()
     
     z_train, x_train = [],[]
     for _data, _target, _freq, _station, _context,_  in train_dataloader:
-        _data = combine(_data,0,2).float().to(args.device)
+        _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
         z = resnet.embed(_data)
-        z_train.append(z.cpu().detach().numpy())
-        x_train.append(_data.cpu().detach().numpy())
+        z_train.append(z.float().cpu().detach().numpy())
+        x_train.append(_data.float().cpu().detach().numpy())
 
     z_train = np.vstack(z_train) 
     x_train = np.vstack(x_train) 
@@ -237,10 +237,10 @@ def eval_resnet(resnet:ResNet,
         test_dataloader.dataset.set_anomaly_mask(anomaly)
 
         for _data, _target, _freq, _station, _context,_ in test_dataloader:
-            _data = combine(_data,0,2).float().to(args.device)
+            _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
             z = resnet.embed(_data)
-            z_test.append(z.cpu().detach().numpy())
-            x_test.append(_data.cpu().detach().numpy())
+            z_test.append(z.float().cpu().detach().numpy())
+            x_test.append(_data.float().cpu().detach().numpy())
         z_test, x_test = np.vstack(z_test), np.vstack(x_test)
 
         N = int(np.max(args.neighbours))
