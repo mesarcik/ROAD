@@ -24,39 +24,16 @@ class PositionClassifier(nn.Module):
         self.model = nn.Sequential(*modules)
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def save(self, 
-            model:str,
-            name:str, 
-            ood_class:int, 
-            seed:int, 
-            pretrain:bool):
-        fpath = self.fpath_from_name(model, 
-                name, 
-                ood_class, 
-                seed, 
-                pretrain)
+    def save(self, args):
+        fpath = self.fpath_from_name(args)
         torch.save(self.state_dict(), fpath)
 
-    def load(self, 
-            model:str,
-            name:str, 
-            ood_class:int, 
-            seed:int, 
-            pretrain:bool):
-        fpath = self.fpath_from_name(model,
-                name, 
-                seed, 
-                ood_class, 
-                pretrain)
+    def load(self, args):
+        fpath = self.fpath_from_name(args)
         self.load_state_dict(torch.load(fpath))
 
-    def fpath_from_name(self, 
-            model:str,
-            name:str, 
-            seed:int, 
-            ood_class:int, 
-            pretrain:bool)->str:
-        return f'outputs/{model}/{name}/position_classifier_{ood_class}_{seed}_{pretrain}.pkl'
+    def fpath_from_name(self,args)->str:
+        return f'outputs/{args.model}/{args.model_name}/position_classifier_{args.ood}_{seed}_{args.pretrain}.pkl'
 
     def forward(self, 
                 z_0: torch.tensor,

@@ -24,42 +24,19 @@ class ClassificationHead(nn.Module):
 
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def save(self, 
-            model:str,
-            name:str, 
-            ood_class:int, 
-            seed:int, 
-            pretrain:bool):
-        fpath = self.fpath_from_name(model, 
-                name, 
-                ood_class, 
-                seed, 
-                pretrain)
+    def save(self, args):
+        fpath = self.fpath_from_name(args)
         torch.save(self.state_dict(), fpath)
 
-    def load(self, 
-            model:str,
-            name:str, 
-            ood_class:int, 
-            seed:int, 
-            pretrain:bool):
-        fpath = self.fpath_from_name(model,
-                name, 
-                seed, 
-                ood_class, 
-                pretrain)
+    def load(self, args):
+        fpath = self.fpath_from_name(args)
         self.load_state_dict(torch.load(fpath))
 
-    def fpath_from_name(self, 
-            model:str,
-            name:str, 
-            seed:int, 
-            ood_class:int, 
-            pretrain:bool)->str:
-        return f'outputs/{model}/{name}/classification_head_{ood_class}_{seed}_{pretrain}.pkl'
+    def fpath_from_name(self,args)->str:
+        return f'outputs/{args.model}/{args.model_name}/classification_head_{args.ood}_{args.seed}_{args.pretrain}.pkl'
 
     def forward(self,
-            _input: torch.tensor)->tensor:
+            _input: torch.tensor)->torch.tensor:
         c = self.classifier(_input)
         return c
 

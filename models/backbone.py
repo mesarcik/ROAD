@@ -17,7 +17,7 @@ class BackBone(nn.Module):
         self.out_dims = out_dims
         self.model_type = model_type
 
-        if model_type == 'resnet50'
+        if model_type == 'resnet50':
             self.resnet = models.resnet50(weights=None)
             self.resnet.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
@@ -28,39 +28,16 @@ class BackBone(nn.Module):
 
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def save(self, 
-            model:str,
-            name:str, 
-            ood_class:int, 
-            seed:int, 
-            pretrain:bool):
-        fpath = self.fpath_from_name(model, 
-                name, 
-                ood_class, 
-                seed, 
-                pretrain)
+    def save(self, args):
+        fpath = self.fpath_from_name(args)
         torch.save(self.state_dict(), fpath)
 
-    def load(self, 
-            model:str,
-            name:str, 
-            ood_class:int, 
-            seed:int, 
-            pretrain:bool):
-        fpath = self.fpath_from_name(model,
-                name, 
-                seed, 
-                ood_class, 
-                pretrain)
+    def load(self, args):
+        fpath = self.fpath_from_name(args)
         self.load_state_dict(torch.load(fpath))
 
-    def fpath_from_name(self, 
-            model:str,
-            name:str, 
-            seed:int, 
-            ood_class:int, 
-            pretrain:bool)->str:
-        return f'outputs/{model}/{name}/backbone_{ood_class}_{seed}_{pretrain}.pkl'
+    def fpath_from_name(self,args)->str:
+        return f'outputs/{args.model}/{args.model_name}/backbone_{args.ood}_{seed}_{args.pretrain}.pkl'
 
     def forward(self, 
                 z: torch.tensor,

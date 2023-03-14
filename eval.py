@@ -4,7 +4,7 @@ import numpy as np
 import gc
 import copy
 from torch.utils.data import DataLoader
-from models import VAE, ResNet, ClassificationHead
+from models import VAE, BackBone, ClassificationHead
 from utils import args
 from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
@@ -193,7 +193,7 @@ def eval_vae(vae:VAE,
                     auprc=auprc, 
                     f1_score=f1)
 
-def eval_resnet(resnet:ResNet, 
+def eval_resnet(resnet, 
                 train_dataloader: DataLoader, 
                 test_dataloader: DataLoader, 
                 args:args, 

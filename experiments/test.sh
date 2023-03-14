@@ -7,6 +7,7 @@ model=position_classifier
 latent_dim=64
 patch_size=64
 batch_size=128
+backbone=resnet50
 
 for amount in 1; do 
 		python -u main.py -model $model\
@@ -14,6 +15,7 @@ for amount in 1; do
 						  -epochs $epochs \
 						  -latent_dim $latent_dim \
 						  -amount $amount\
+						  -backbone $backbone\
 						  -patch_size $patch_size\
 						  -data_path /data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_07-03-23.h5\
 						  -output_path outputs/LOFAR_amounts.csv\

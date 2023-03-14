@@ -11,22 +11,25 @@ import os
 import gc
 
 from data import get_data
-from models import VAE, ResNet, PositionClassifier, Decoder, ClassificationHead
-from train import train_vae, train_resnet, train_position_classifier
+from models import VAE, BackBone, PositionClassifier, Decoder, ClassificationHead
+from train import train_vae, train_supervised, train_ssl
 from eval import eval_vae, eval_resnet
 from utils import plot_results
 
 
 def main():
     print(args.model_name)
-    transform = None#transforms.Compose([transforms.RandomResizedCrop(size=(args.patch_size, args.patch_size),
-                #                                                 scale=(0.5, 1.0)),  
-                #                    transforms.RandomHorizontalFlip(p=0.5),
-                #                    transforms.RandomVerticalFlip(p=0.5),
-                #                    ])
-    (train_dataset, val_dataset, test_dataset, _, _) = get_data(args, transform=transform)   
+    (train_dataset, 
+            val_dataset, 
+            test_dataset, 
+            supervised_train_dataset, 
+            supervised_val_dataset) = get_data(args)
 
     train_dataloader = DataLoader(train_dataset,
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
+
+    supervised_train_dataloader = DataLoader(supervised_train_dataset,
                                   batch_size=args.batch_size,
                                   shuffle=True)
 
@@ -35,31 +38,56 @@ def main():
                                  shuffle=False)
 
     if args.model == 'vae':
-        vae = VAE(in_channels=4,
-                  latent_dim=args.latent_dim,
-                  patch_size=args.patch_size,
-                  hidden_dims=args.hidden_dims)
+        vae = VAE(in_channels=4, 
+                latent_dim=args.latent_dim,
+                patch_size=args.patch_size,
+                hidden_dims=args.hidden_dims)
         if args.load_model:
             vae.load_state_dict(torch.load('outputs/vae/{}/vae.pt'.format(args.model_name)))
         else:
             vae = train_vae(train_dataloader, vae, args)
         eval_vae(vae, train_dataloader, test_dataloader, args, error='nln')
 
-    elif args.model == 'resnet':
-        resnet = ResNet(dim=test_dataset.n_patches**2, in_channels=4)
-        resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
+    elif args.model == 'supervised':
+        backbone = BackBone(in_channels=4, 
+                out_dims=len(defaults.anomalies), 
+                model_type='resnet50')
         if args.load_model:
-            resnet.load_state_dict(torch.load('outputs/resnet/{}/resnet.pt'.format(args.model_name)))
-        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
+            backbone.load(args)
+        else:
+            backbone = train_supervised(supervised_train_dataloader, 
+                    supervised_val_dataset, 
+                    backbone,
+                    args)
+
+        eval(backbone, 
+            supervised_train_dataloader, 
+            test_dataloader, 
+            args, 
+            error='nln')
 
     elif args.model == 'position_classifier':
-        resnet = ResNet(out_dims=8,in_channels=4, latent_dim=args.latent_dim)
-        classifier = PositionClassifier(in_dims=2*args.latent_dim, out_dims=3)
+        backbone = BackBone(in_channels=4,
+                out_dims=args.latent_dim, 
+                model_type=args.backbone)
+        position_classifier = PositionClassifier(in_dims=args.latent_dim, 
+                out_dims=8)
+        decoder = Decoder(out_channels=4,
+                         patch_size=args.patch_size,
+                         latent_dim=args.latent_dim,
+                         n_layers=5)
+
         if args.load_model:
-            resnet.load_state_dict(torch.load('outputs/position_classifier/{}/resnet.pt'.format(args.model_name)))
-            classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))
+            resnet.load(args)
+            position_classifier.load(args)
+            decoder.load(args)
         else:
-            resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+            backbone, position_classifier, decoder = train_ssl(train_dataloader, 
+                    val_dataset, 
+                    backbone, 
+                    position_classifier, 
+                    decoder,
+                    args)
 
         for i in range(10):
             test_dataloader.dataset.set_seed(np.random.randint(100))
