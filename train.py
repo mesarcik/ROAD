@@ -234,14 +234,16 @@ def train_position_classifier(
                 decoder_optimizer.zero_grad()
 
                 z_data  = resnet.embed(_data)
-                x_hat = decoder(z_data)
+                hat_data = decoder(z_data)
                 z_neighbour = resnet.embed(_context_neighbour)
+                hat_neighbour = decoder(z_neighbour)
                 c_pos = resnet(z_data, z_neighbour)
                 #c_freq = classifier(z_data, z_neighbour)
 
                 location_loss = resnet.loss_function(c_pos, _context_label)['loss']
                 #frequency_loss = classifier.loss_function(c_freq, _context_frequency)['loss']
-                decoder_loss = mse(_context_neighbour, x_hat)
+                decoder_loss = mse(_context_neighbour, hat_neighbour) + mse(_data, hat_data)
+                #decoder_loss = mse(_data, hat_neighbour) + mse(_context_neighbour, hat_data)
 
                 loss = location_loss + decoder_loss #+ 1.00001*torch.sum(torch.square(_z))#classifier_loss +  
 
