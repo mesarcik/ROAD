@@ -3,7 +3,7 @@ import numpy as np
 import h5py
 import random 
 from tqdm import tqdm
-from defaults import anomalies, SIZE 
+from utils.data.defaults import anomalies, SIZE 
 import cv2
 import copy
 from datetime import datetime
@@ -80,7 +80,7 @@ def create_dataset()->None:
     test_group = hf.create_group('test_data')
     anomalies_group = hf.create_group('anomaly_data')
 
-    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_15-12-22.pkl', 'rb') as f:
+    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_06-03-23.pkl', 'rb') as f:
         data, labels, source, ids, frequency_band, flags = cPickle.load(f,encoding='latin')
   
     data, labels, source, ids, frequency_band  = remove_singles(data, 
@@ -106,7 +106,7 @@ def create_dataset()->None:
     train_frequency = np.array([frequency_band[i] for i in train_inds], dtype='float32')
 
     # Randomly sample non-anomalous data for train/test split
-    reserved_samples = 800
+    reserved_samples = 1000
     mask = np.zeros(len(train_inds))
     mask[:reserved_samples] = 1
     np.random.shuffle(mask)
@@ -130,6 +130,9 @@ def create_dataset()->None:
         test_inds = [i for i,l in enumerate(labels) if ((anomaly in l) and 
                                                         ('unknown' not in l) and 
                                                         ('scintillation' not in l) and 
+                                                        ('real_high_noise' not in l) and 
+                                                        ('ionosphere' not in l) and 
+                                                        ('electric_fence' not in l) and 
                                                         ('high_noise_elements' not in l))]              
         print(anomaly, len(test_inds))
 

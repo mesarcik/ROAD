@@ -2,8 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
-
-
+import os
 
 class Decoder(nn.Module):
     def __init__(self, out_channels:int, patch_size:int, latent_dim:int):
@@ -57,7 +56,8 @@ class Decoder(nn.Module):
 
     def save(self, name):
         fpath = self.fpath_from_name(name)
-        makedirpath(fpath)
+        if not os.path.exists(fpath):
+            os.makedirs(fpath)
         torch.save(self.state_dict(), fpath)
 
     def load(self, name):
