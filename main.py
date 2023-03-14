@@ -66,17 +66,16 @@ def main():
             args, 
             error='nln')
 
-    elif args.model == 'position_classifier':
+    elif args.model == 'ssl':
         backbone = BackBone(in_channels=4,
                 out_dims=args.latent_dim, 
                 model_type=args.backbone)
-        position_classifier = PositionClassifier(in_dims=args.latent_dim, 
+        position_classifier = PositionClassifier(latent_dim=args.latent_dim, 
                 out_dims=8)
         decoder = Decoder(out_channels=4,
                          patch_size=args.patch_size,
                          latent_dim=args.latent_dim,
                          n_layers=5)
-
         if args.load_model:
             resnet.load(args)
             position_classifier.load(args)

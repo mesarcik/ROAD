@@ -10,7 +10,6 @@ anomalies = [
     #'strong_radio_emitter',
     'galactic_plane',
     'source_in_sidelobes',
-    'ionosphere',
     'solar_storm']
 
 percentage_comtamination = {'oscillating_tile':0.04,
@@ -23,7 +22,6 @@ percentage_comtamination = {'oscillating_tile':0.04,
                             'lightning':0.07,
                             'galactic_plane':0.1,
                             'source_in_sidelobes':0.1,
-                            'ionosphere':0.1,
                             'solar_storm':0.07}
 default_stations = [
     'CS001HBA0',

@@ -163,15 +163,14 @@ def train_supervised(
             resnet.train()
     return resnet
 
-def train_ssl(
-        train_dataloader: DataLoader,
+def train_ssl(train_dataloader: DataLoader,
         val_dataset:Dataset,
         backbone:BackBone,
         position_classifier:PositionClassifier,
         decoder:Decoder,
         args: args):
     """
-        Trains Position Clasifier
+        Trains SSL model
 
         Parameters
         ----------
@@ -207,7 +206,7 @@ def train_ssl(
         decoder.parameters(),
         lr=args.learning_rate)  
 
-    total_loss, ssl_loss, decoder_loss, regulation_loss  = [], [], [], []
+    total_loss, location_loss, decoder_loss, regulation_loss  = [], [], [], []
     validation_accuracies = []
     total_step = len(train_dataloader)
     prev_acc = 0
@@ -234,7 +233,6 @@ def train_ssl(
                 hat_data = decoder(z_data)
                 hat_neighbour = decoder(z_neighbour)
 
-
                 location_loss = position_classifier.loss_function(c_pos, _context_label)
                 decoder_loss = decoder.loss_function(_context_neighbour, hat_neighbour) + decoder.loss_function(_data, hat_data)
                 reg_loss = 0.01*(torch.sum(torch.square(z_data)) + torch.sum(torch.square(z_neighbour)))
@@ -251,6 +249,9 @@ def train_ssl(
                 r_loss += reg_loss.item()
 
                 # Validation 
+                backbone.eval()
+                decoder.eval()
+                position_classifier.eval()
                 _data = val_dataset.patch(val_dataset.data)
                 _labels, _neighbour = val_dataset.context_prediction(_data)
                 _data = _data.float().to(args.device, dtype=torch.bfloat16)
@@ -265,14 +266,18 @@ def train_ssl(
                         dim=-1) == _labels) / _labels.shape[0]
                 running_acc += val_acc_context
 
+                backbone.train()
+                decoder.train()
+                position_classifier.train()
+
                 tepoch.set_postfix(total_loss=loss.item(),
                         location_loss = location_loss.item(),
                         decoder_loss = decoder_loss.item(),
-                        regulation_loss = reg_loss.item()
+                        regulation_loss = reg_loss.item(),
                         location_accuracy=val_acc_context.item())
 
             total_loss.append(running_loss/total_step)
-            ssl_loss.append(l_loss/total_step)
+            location_loss.append(l_loss/total_step)
             decoder_loss.append(d_loss / total_step)
             regulation_loss.append(r_loss / total_step)
 
@@ -292,14 +297,12 @@ def train_ssl(
 
             loss_curve(model_path,
                        epoch,
-                       total_loss=total_train_loss,
-                       location_loss=encoder_train_loss,
-                       #frequency_loss=location_train_loss,
+                       total_loss=total_loss,
+                       location_loss=location_loss,
+                       decoder_loss=decoder_loss,
+                       regulation_loss=regulation_loss,
                        validation_accuracy=validation_accuracies,
-                       #context_accuracies=context_accuracies,
                        descriptor='position')
-            classifier.train()
-            resnet.train()
 
     with open('{}/model.config'.format(model_path), 'w') as fp:
         for arg in args.__dict__:

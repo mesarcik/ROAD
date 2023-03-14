@@ -3,7 +3,7 @@ echo "Logging for hyperparams.sh at time: $(date)." >> log.log
 limit=None
 epochs=250
 seed=42 #$(openssl rand -hex 3)
-model=position_classifier
+model=ssl
 latent_dim=64
 patch_size=64
 batch_size=128
