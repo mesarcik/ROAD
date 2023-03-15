@@ -4,15 +4,15 @@ import numpy as np
 import gc
 import copy
 from torch.utils.data import DataLoader
-from models import VAE, BackBone, ClassificationHead
+from models import VAE, BackBone, ClassificationHead, Decoder
 from utils import args
 from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
-from utils.vis import io, nln_io
+from utils.vis import io, knn_io
 from data import get_data
 from utils.data import defaults, combine, reconstruct, reconstruct_distances
 
-def nln(z_test:np.array, 
+def knn(z_test:np.array, 
         z_train:np.array, 
         N:int, 
         args:args,
@@ -20,7 +20,7 @@ def nln(z_test:np.array,
                      np.array, 
                      np.array):
     """
-        Performs NLN calculation
+        Performs KNN Lookup
         
         Parameters
         ----------
@@ -29,7 +29,6 @@ def nln(z_test:np.array,
         x_hat: the vae reconstruction of training data (optional)
         args: utils.args
         N: number of neigbours
-        verbose: prints tqdm output
 
         Returns
         -------
@@ -75,49 +74,57 @@ def integrate(error:np.array, args:args)->np.array:
     dists = np.mean(dists, axis = tuple(range(1,dists.ndim)))
     return dists
 
-def compute_metrics(labels:np.array, pred:np.array, anomaly:int=0, multiclass=False)->(float, float, float):
+def compute_metrics(targets:np.array, 
+                    predictions:np.array, 
+                    beta:int=2,
+                    multiclass=False)->(list, list):
     """
-        Computes AUROC, AUPRC and F1 for integrated data
+        Computes AUROC, AUPRC and F-beta for integrated data
 
         Parameters
         ----------
         labels: labels from dataset
         pred: the integrated prediction from model
-        multiclass: indicates if we are doing multiclass classifcation
+        beta: the beta score 
         anomaly: used for multiclass classifcation
+        multiclass: indicates if we are doing multiclass classifcation
 
         Returns
         -------
-        AUROC: auroc  
         AUPRC: auprc
-        F1-Score: Optimal f1-score based on auprc
+        F-beta: Optimal f-beta-score based on auprc
     """
-    assert len(labels) == len(pred), "The length of predictions != length of labels"
+    assert len(targets) == len(predictions), "The length of predictions != length of targets"
+    auprcs, f_scores = [], []
 
     if multiclass:
-        _ground_truth = [l == anomaly for l in labels]
+        anomalies = copy.deepcopy(defaults.anomalies)
+        anomalies.append('normal')
+        
+        for encoding, anomaly in enumerate(anomalies):
+            precision, recall, thresholds = precision_recall_curve(targets==encoding, 
+                    predictions==encoding)
+            auprcs.append(auc(recall, precision))
+
+            f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*recall+precision))
+            f_scores.append(np.max(f_betas))
     else:
-        _ground_truth = [l != len(defaults.anomalies) for l in labels]
 
-    fpr,tpr, thr = roc_curve(_ground_truth, pred)
-    auroc = auc(fpr, tpr)
+        precision, recall, thresholds = precision_recall_curve(targets!=len(defaults.anomalies), 
+                predictions!=len(defaults.anomalies))
+        auprc.append(auc(recall, precision))
 
-    precision, recall, thresholds = precision_recall_curve(_ground_truth, pred)
-    auprc = auc(recall, precision)
+        f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*recall+precision))
+        f_scores.append(np.max(f_betas))
 
-    f1_scores = np.nan_to_num(2*recall*precision/(recall+precision))
-    f1_score = np.max(f1_scores)
-
-    return (auroc,auprc,f1_score)
+    return auprcs, f_scores
 
 def eval_vae(vae:VAE, 
             train_dataloader: DataLoader, 
             test_dataloader: DataLoader,
-            args:args, 
-            error:str="nln")->None:
+            args:args)->None:
     """
-        Computes AUROC, AUPRC and F1 for VAE for multiple calculation types 
-        and writes them to file
+        Computes AUPRC and F-beta for VAE for multiple calculation types 
 
         Parameters
         ----------
@@ -163,7 +170,7 @@ def eval_vae(vae:VAE,
         if error == 'nln':
             for N in args.neighbours:
                 # build a flat (CPU) index
-                D, I = nln(z_test, z_train, N, args)
+                D, I = knn(z_test, z_train, N, args)
                 dists = integrate(D, args)
                 auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels,
                                                     dists)
@@ -193,100 +200,93 @@ def eval_vae(vae:VAE,
                     auprc=auprc, 
                     f1_score=f1)
 
-def eval_resnet(resnet, 
-                train_dataloader: DataLoader, 
-                test_dataloader: DataLoader, 
-                args:args, 
-                plot:bool=True,
-                error:str="nln")->None:
+def eval_supervised(backbone:BackBone, 
+                    test_dataloader: DataLoader, 
+                    args:args, 
+                    plot:bool=True)->None:
     """
-        Computes AUROC, AUPRC and F1 for Resnet for multiple calculation types 
-        and writes them to file
+        Computes AUPRC and F-beta for Supervised model for multiple calculation types 
 
         Parameters
         ----------
-        resnet : trained Resnet on the cpu
-        train_dataloader: Dataloader for the training data
+        backbone: Backbone 
         test_dataloader: Dataloader for the test data
         args: args
-        error: calculation method used for Resnet ~ ('nln')
 
         Returns
         -------
         None
     """
-    resnet.to(args.device, dtype=torch.bfloat16)
-    resnet.eval()
+    backbone.to(args.device, dtype=torch.bfloat16)
+    backbone.eval()
+    test_dataloader.dataset.set_supervision(True)
     
-    z_train, x_train = [],[]
-    for _data, _target, _freq, _station, _context,_  in train_dataloader:
-        _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-        z = resnet.embed(_data)
-        z_train.append(z.float().cpu().detach().numpy())
-        x_train.append(_data.float().cpu().detach().numpy())
+    targets, predictions = [], []
+    for _data, _target, _ in test_dataloader:
+        _data = _data.to(args.device, dtype=torch.bfloat16)
+        c = backbone(_data)
+        c = c.argmax(dim=-1).cpu().detach()
 
-    z_train = np.vstack(z_train) 
-    x_train = np.vstack(x_train) 
-    
-    anomalies = list(np.arange(len(defaults.anomalies)))
-    anomalies.append(-1)
-    for anomaly in anomalies:
-        gc.collect()
-        z_test, x_test = [], []
-        print(f'anomaly={anomaly}')
-        test_dataloader.dataset.set_anomaly_mask(anomaly)
+        predictions.extend(c.numpy().flatten())
+        targets.extend(_target.numpy().flatten())
+        
+    predictions, targets = np.array(predictions), np.array(targets)
+    auprcs, f_scores = compute_metrics(targets, predictions, multiclass=True)
+    anomalies = copy.deepcopy(defaults.anomalies)
+    anomalies.append('normal')
 
-        for _data, _target, _freq, _station, _context,_ in test_dataloader:
-            _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-            z = resnet.embed(_data)
-            z_test.append(z.float().cpu().detach().numpy())
-            x_test.append(_data.float().cpu().detach().numpy())
-        z_test, x_test = np.vstack(z_test), np.vstack(x_test)
+    for i,anomaly in enumerate(anomalies):
+        save_results(args, 
+                anomaly=anomaly,
+                epoch=args.epochs,
+                neighbour=-1,
+                beta=2, 
+                error_type='None',
+                auprc=auprcs[i], 
+                f_score=f_scores[i])
+    return predictions
+def eval_ssl():
+    if plot:
+        x_recon = reconstruct(x_test, args)
 
-        N = int(np.max(args.neighbours))
-        _D, _I = nln(z_test, z_train, N, args)
-
-        if plot:
-            x_recon = reconstruct(x_test, args)
-
-            neighbours = x_train[_I]
-            neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
-                                        for i in range(neighbours.shape[1])])
-            D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(defaults.SIZE[0]//args.patch_size)**2 ,
-                                                       int(defaults.SIZE[0]//args.patch_size),
-                                                       int(defaults.SIZE[0]//args.patch_size))
+        neighbours = x_train[_I]
+        neighbours_recon = np.stack([reconstruct(neighbours[:,i,:],args) 
                                     for i in range(neighbours.shape[1])])
+        D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(defaults.SIZE[0]//args.patch_size)**2 ,
+                                                   int(defaults.SIZE[0]//args.patch_size),
+                                                   int(defaults.SIZE[0]//args.patch_size))
+                                for i in range(neighbours.shape[1])])
 
-            _min, _max = np.percentile(D, [1,99])
-            D = np.clip(D,_min, _max)
-            D = ((D - D.min()) / (D.max() - D.min()))
+        _min, _max = np.percentile(D, [1,99])
+        D = np.clip(D,_min, _max)
+        D = ((D - D.min()) / (D.max() - D.min()))
 
-            nln_io(5, 
-                x_recon, 
-                neighbours_recon,
-                test_dataloader.dataset.labels,
-                D,
-                'outputs/{}/{}'.format(args.model, args.model_name),
-                args.epochs, 
-                anomaly) 
+        knn_io(5, 
+            x_recon, 
+            neighbours_recon,
+            test_dataloader.dataset.labels,
+            D,
+            'outputs/{}/{}'.format(args.model, args.model_name),
+            args.epochs, 
+            anomaly) 
 
-            for n in range(1,N+1):
-                # build a flat (CPU) index
-                D,I = _D[:,:n], _I[:,:n]
-                dists = integrate(D,  args)
+        for n in range(1,N+1):
+            # build a flat (CPU) index
+            D,I = _D[:,:n], _I[:,:n]
+            dists = integrate(D,  args)
 
-                auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, dists)
+            auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, dists)
 
-                print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(args.epochs,
-                                                                                        n,
-                                                                                        auroc,
-                                                                                        auprc,
-                                                                                        f1))
+            print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(args.epochs,
+                                                                                    n,
+                                                                                    auroc,
+                                                                                    auprc,
+                                                                                    f1))
 
-                save_results(args, 
-                        anomaly=anomaly,
-                        epoch=args.epochs,
-                        neighbour=n,
-                        auroc=auroc, 
-                        auprc=auprc, 
-                        f1_score=f1)
+            save_results(args, 
+                    anomaly=anomaly,
+                    epoch=args.epochs,
+                    neighbour=n,
+                    auroc=auroc, 
+                    auprc=auprc, 
+                    f1_score=f1)

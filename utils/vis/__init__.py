@@ -1,1 +1,1 @@
-from .plot import imscatter, io, loss_curve, nln_io, plot_results
+from .plot import imscatter, io, loss_curve, knn_io, plot_results

@@ -22,7 +22,7 @@ class ClassificationHead(nn.Module):
 
         self.classifier = nn.Sequential(*modules)
 
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.BCELoss()
 
     def save(self, args):
         fpath = self.fpath_from_name(args)

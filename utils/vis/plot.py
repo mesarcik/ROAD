@@ -50,7 +50,7 @@ def io(n_plots:int,
     plt.close(fig)
 
 
-def nln_io(n_plots:int,
+def knn_io(n_plots:int,
         x_test:np.array, 
         neighbours:np.array,
         labels:np.array,

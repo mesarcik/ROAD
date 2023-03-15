@@ -10,7 +10,6 @@ from torch import nn
 from utils.args import args
 from utils.data import combine
 from utils.vis import imscatter, io, loss_curve
-from eval import eval_resnet
 
 
 def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
@@ -80,23 +79,23 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
 
 
 def train_supervised(
-        train_dataloader: DataLoader,
-        val_dataset,
-        resnet,
-        args: args):
+        supervised_train_dataloader: DataLoader,
+        val_dataset:Dataset,
+        backbone:BackBone,
+        args: args)->BackBone:
     """
-        Trainsa Resnet
+        Trains Backbone in a supervised fashion
 
         Parameters
         ----------
-        train_dataloader: dataloader
+        supervised_train_dataloader: dataloader
         val_dataset: validation dataset
-        resnet:resnet
+        backbone: backbone
         args: runtime arguments
 
         Returns
         -------
-        data: list of baselines with single channels removed
+        backbone: backbone 
 
     """
     model_path = 'outputs/{}/{}'.format(args.model,
@@ -104,64 +103,59 @@ def train_supervised(
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
-    resnet.to(args.device, dtype=torch.bfloat16)
+    backbone.to(args.device, dtype=torch.bfloat16)
     optimizer = torch.optim.Adam(
-        resnet.parameters(),
+        backbone.parameters(),
         lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
     train_loss, validation_accuracies = [], []
-    total_step = len(train_dataloader)
+    total_step = len(supervised_train_dataloader)
+    supervised_train_dataloader.dataset.set_supervision(True)
 
+    _val_data = val_dataset.data.float().to(args.device, dtype=torch.bfloat16)
+    _val_targets = val_dataset.labels
+    prev_acc = 0
+    
     for epoch in range(1, args.epochs + 1):
-        with tqdm(train_dataloader, unit="batch") as tepoch:
+        with tqdm(supervised_train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc = 0.0, 0.0
-            for _data, _target, _freq, _context, _, _ in tepoch:
+            for _data, _target, _source in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
-                _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-                _out = _context.to(args.device)
+                _data = _data.to(args.device, dtype=torch.bfloat16)
+                _target = _target.type(torch.LongTensor).to(args.device)
 
                 optimizer.zero_grad()
 
-                z = resnet(_data)
-                loss = resnet.loss_function(z, _out)['loss']
+                c = backbone(_data)
+                loss = backbone.loss_function(c, _target)
+
                 loss.backward()
                 optimizer.step()
-
                 running_loss += loss.item()
 
-                _data = val_dataset.data.float().to(args.device, dtype=torch.bfloat16)
-                z = resnet(_data).cpu().detach()
-
+                #Validation 
+                backbone.eval()
+                c = backbone(_val_data).cpu().detach()
                 val_acc = torch.sum(
-                    z.argmax(
-                        dim=-1) == val_dataset.context_labels) / val_dataset.context_labels.shape[0]
+                    c.argmax(
+                        dim=-1) == _val_targets) / _val_targets.shape[0]
                 running_acc += val_acc
                 tepoch.set_postfix(loss=loss.item(), val_acc=val_acc.item())
+                backbone.train()
 
             train_loss.append(running_loss / total_step)
             validation_accuracies.append(running_acc/ total_step)
 
-            if epoch % 50 == 0:  # TODO: check for model improvement
-                # print validation loss
+            if prev_acc < validation_accuracies[-1]:
+                backbone.save(args)
+                prev_acc=validation_accuracies[-1]
 
-                torch.save(
-                    resnet.state_dict(),
-                    '{}/resnet.pt'.format(model_path))
-                resnet.eval()
-                Z = resnet.embed(_data).cpu().detach().numpy()
-                z = TSNE(n_components=2,
-                         learning_rate='auto',
-                         init='random',
-                         perplexity=3).fit_transform(Z)
-
-                _inputs = _data.cpu().detach().numpy()
-                imscatter(z, _inputs, model_path, epoch)
             loss_curve(model_path,
                        epoch,
                        total_loss=train_loss,
                        validation_accuracy=validation_accuracies,
                        descriptor='resnet')
-            resnet.train()
-    return resnet
+            backbone.train()
+    return backbone 
 
 def train_ssl(train_dataloader: DataLoader,
         val_dataset:Dataset,
@@ -191,22 +185,22 @@ def train_ssl(train_dataloader: DataLoader,
         os.makedirs(model_path)
 
     backbone.to(args.device, dtype=torch.bfloat16)
-    position_classifier.to(args.device, dtype=bfloat16)
+    position_classifier.to(args.device, dtype=torch.bfloat16)
     decoder.to(args.device, dtype=torch.bfloat16)
 
     backbone_optimizer = torch.optim.Adam(
-        resnet.parameters(),
+        backbone.parameters(),
         lr=args.learning_rate)  
 
     position_classifier_optimizer = torch.optim.Adam(
-        classifier.parameters(),
+        position_classifier.parameters(),
         lr=args.learning_rate) 
 
     decoder_optimizer = torch.optim.Adam(
         decoder.parameters(),
         lr=args.learning_rate)  
 
-    total_loss, location_loss, decoder_loss, regulation_loss  = [], [], [], []
+    total_loss, position_loss, reconstruction_loss, regulation_loss  = [], [], [], []
     validation_accuracies = []
     total_step = len(train_dataloader)
     prev_acc = 0
@@ -235,7 +229,7 @@ def train_ssl(train_dataloader: DataLoader,
 
                 location_loss = position_classifier.loss_function(c_pos, _context_label)
                 decoder_loss = decoder.loss_function(_context_neighbour, hat_neighbour) + decoder.loss_function(_data, hat_data)
-                reg_loss = 0.01*(torch.sum(torch.square(z_data)) + torch.sum(torch.square(z_neighbour)))
+                reg_loss = 0.00001*(torch.sum(torch.square(z_data)) + torch.sum(torch.square(z_neighbour)))
 
                 loss = location_loss + decoder_loss +  reg_loss
                 loss.backward()
@@ -277,8 +271,8 @@ def train_ssl(train_dataloader: DataLoader,
                         location_accuracy=val_acc_context.item())
 
             total_loss.append(running_loss/total_step)
-            location_loss.append(l_loss/total_step)
-            decoder_loss.append(d_loss / total_step)
+            position_loss.append(l_loss/total_step)
+            reconstruction_loss.append(d_loss / total_step)
             regulation_loss.append(r_loss / total_step)
 
             validation_accuracies.append(running_acc/ total_step)
@@ -291,15 +285,11 @@ def train_ssl(train_dataloader: DataLoader,
                     decoder.save(args)
                     position_classifier.save(args)
 
-                    with open('{}/model.config'.format(model_path), 'w') as fp:
-                        for arg in args.__dict__:
-                            fp.write('{}: {}\n'.format(arg, args.__dict__[arg]))
-
             loss_curve(model_path,
                        epoch,
                        total_loss=total_loss,
-                       location_loss=location_loss,
-                       decoder_loss=decoder_loss,
+                       position_loss=position_loss,
+                       reconstruciton_loss=reconstruction_loss,
                        regulation_loss=regulation_loss,
                        validation_accuracy=validation_accuracies,
                        descriptor='position')

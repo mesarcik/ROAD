@@ -3,17 +3,15 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 import numpy as np
-import matplotlib.pyplot as plt
 from utils.vis import imscatter
 from utils.args import args
 from utils.data import defaults
-import os
-import gc
 
 from data import get_data
 from models import VAE, BackBone, PositionClassifier, Decoder, ClassificationHead
 from train import train_vae, train_supervised, train_ssl
-from eval import eval_vae, eval_resnet
+from fine_tune import fine_tune
+from eval import eval_vae, eval_supervised, eval_ssl
 from utils import plot_results
 
 
@@ -50,7 +48,7 @@ def main():
 
     elif args.model == 'supervised':
         backbone = BackBone(in_channels=4, 
-                out_dims=len(defaults.anomalies), 
+                out_dims=len(defaults.anomalies)+1, 
                 model_type='resnet50')
         if args.load_model:
             backbone.load(args)
@@ -60,11 +58,9 @@ def main():
                     backbone,
                     args)
 
-        eval(backbone, 
-            supervised_train_dataloader, 
+        eval_supervised(backbone, 
             test_dataloader, 
-            args, 
-            error='nln')
+            args)
 
     elif args.model == 'ssl':
         backbone = BackBone(in_channels=4,
@@ -76,17 +72,26 @@ def main():
                          patch_size=args.patch_size,
                          latent_dim=args.latent_dim,
                          n_layers=5)
+        classification_head =  ClassificationHead(out_dims=len(defaults.anomalies)+1,
+                                                    latent_dim= args.latent_dim)
         if args.load_model:
             resnet.load(args)
             position_classifier.load(args)
             decoder.load(args)
+            classification_head.load(args)
         else:
-            backbone, position_classifier, decoder = train_ssl(train_dataloader, 
-                    val_dataset, 
-                    backbone, 
-                    position_classifier, 
-                    decoder,
-                    args)
+            #backbone, position_classifier, decoder = train_ssl(train_dataloader, 
+            #        val_dataset, 
+            #        backbone, 
+            #        position_classifier, 
+            #        decoder,
+            #        args)
+
+            classification_head = fine_tune(supervised_train_dataloader,
+                                            val_dataset,
+                                            backbone,
+                                            classification_head,
+                                            args)
 
         for i in range(10):
             test_dataloader.dataset.set_seed(np.random.randint(100))
