@@ -72,7 +72,7 @@ def main():
                          patch_size=args.patch_size,
                          latent_dim=args.latent_dim,
                          n_layers=5)
-        classification_head =  ClassificationHead(out_dims=len(defaults.anomalies)+1,
+        classification_head =  ClassificationHead(out_dims=1,
                                                     latent_dim= args.latent_dim)
         if args.load_model:
             resnet.load(args)

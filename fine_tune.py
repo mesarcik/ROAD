@@ -64,18 +64,14 @@ def fine_tune(
                 Z = _z.reshape([len(_z)//int(defaults.SIZE[0]//args.patch_size)**2, 
                                 args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
                 _c = classification_head(Z).squeeze(1)
-                print(_c.shape)
                 _labels = _target!=len(defaults.anomalies)
-                print(_labels.shape)
-                loss = classification_head.loss_fn(_c,_labels.to(args.device, dtype=torch.float))
+                loss = classification_head.loss_fn(_c,_labels.to(args.device, dtype=torch.bfloat16))
 
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
 
-                val_acc = torch.sum(
-                    _c.argmax(
-                        dim=-1) == _labels) / _labels.shape[0]
+                val_acc = torch.sum(_c == _labels) / _labels.shape[0]
                 running_acc += val_acc.cpu().detach()
 
                 tepoch.set_postfix(total_loss=loss.item(), 
