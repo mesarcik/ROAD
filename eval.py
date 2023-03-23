@@ -104,7 +104,7 @@ def compute_metrics(targets:np.array,
 
         precision, recall, thresholds = precision_recall_curve(targets!=len(defaults.anomalies), 
                 predictions!=len(defaults.anomalies))
-        auprc.append(auc(recall, precision))
+        auprcs.append(auc(recall, precision))
 
         f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*recall+precision))
         f_scores.append(np.max(f_betas))
@@ -193,7 +193,7 @@ def eval_vae(vae:VAE,
         if error == 'nln':
             for N in args.neighbours:
                 # build a flat (CPU) index
-                D, I = knn(z_test, z_train, N, args)
+                D, I = knn(z_test, z_train, N)
                 dists = integrate(D, args)
                 auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels,
                                                     dists)
@@ -307,7 +307,7 @@ def eval_classification_head(backbone:BackBone,
     
     targets, predictions = [], []
     for _data, _target, _ ,_ in test_dataloader:
-        _data = _data.to(args.device, dtype=torch.bfloat16)
+        _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
         _z = backbone(_data)
         Z = _z.reshape([len(_z)//int(defaults.SIZE[0]//args.patch_size)**2, 
                         args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
@@ -315,7 +315,7 @@ def eval_classification_head(backbone:BackBone,
         c = c.argmax(dim=-1).cpu().detach()
 
         predictions.extend(c.numpy().flatten())
-        targets.extend(_target.numpy().flatten())
+        targets.extend(_target[:,0].numpy().flatten())
         
     predictions, targets = np.array(predictions), np.array(targets)
     auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=True)
@@ -359,35 +359,38 @@ def eval_knn(backbone: BackBone,
     test_dataloader.dataset.set_supervision(False)
     train_dataloader.dataset.set_supervision(False)
     
-    z_train, x_train = [],[]
+    z_train, x_train, x_hat = [],[],[]
     for _data, _target, _ ,_ in train_dataloader:
         _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-        z = backbone(_data)
+        _z = backbone(_data)
+        _x_hat = decoder(_z)
 
-        z_train.append(z.float().cpu().detach().numpy())
+        z_train.append(_z.float().cpu().detach().numpy())
         x_train.append(_data.float().cpu().detach().numpy())
+        x_hat.append(_x_hat.float().cpu().detach().numpy())
 
     z_train = np.vstack(z_train)
     x_train = np.vstack(x_train)
+    x_hat = np.vstack(x_hat)
 
     anomalies = list(np.arange(len(defaults.anomalies)))
     anomalies.append(-1)
     for anomaly in anomalies:
-        z_test, x_test, x_hat = [], [], []
+        z_test, x_test, targets = [], [], []
         test_dataloader.dataset.set_anomaly_mask(anomaly)
         for _data, _target, _ ,_ in test_dataloader:
             _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
             _z = backbone(_data)
-            _x_hat = decoder(_z)
 
             z_test.append(_z.float().cpu().detach().numpy())
             x_test.append(_data.float().cpu().detach().numpy())
-            x_hat.append(_x_hat.float().cpu().detach().numpy())
+            targets.extend(_target[:,0].numpy().flatten())
 
-        z_test, x_test, x_hat = np.vstack(z_test), np.vstack(x_test), np.vstack(x_hat)
+        z_test, x_test = np.vstack(z_test), np.vstack(x_test)
+        targets = np.array(targets)
 
         N = int(np.max(args.neighbours))
-        _D, _I = knn(z_test, z_train, N, args)
+        _D, _I = knn(z_test, z_train, N)
         x_hat_neigh = x_hat[_I]
 
         knn_io(5, 
@@ -399,36 +402,40 @@ def eval_knn(backbone: BackBone,
             test_dataloader.dataset.labels,
             'outputs/{}/{}'.format(args.model, args.model_name),
             args.epochs, 
-            anomaly,
-            args) 
+            args,
+            anomaly=anomaly) 
 
             
         D,I = _D[:,:N], _I[:,:N]
         dists = integrate(D, args)
-        mse = np.stack([ np.absolute(x_hat - x_hat_neigh[:,n,...]) for n in range(N)], axis=-1)
-        mse = np.mean(mse, axis = tuple(range(1,mse.ndim)))
+        mse = np.stack([ np.absolute(x_test - x_hat_neigh[:,n,...]) for n in range(N)], axis=-1)
+        _mse = np.mean(mse, axis = tuple(range(1,mse.ndim)))
+        mse = integrate(mse, args)
 
-        auroc, auprc, f1 = compute_metrics(test_dataloader.dataset.labels, dists)
-        auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=False)
+        knn_auprcs, knn_f_scores, _ = compute_metrics(targets, dists, multiclass=False)
+        print("N:{}, NLN_AUPRC: {:.4f}, NLN_F2: {:.4f}".format(N,knn_auprcs[0],knn_f_scores[0]))
         save_results(args, 
-                anomaly='anomaly',
+                anomaly=anomaly,
                 epoch=args.epochs,
-                neighbour=-1,
+                neighbour=N,
                 beta=2, 
-                error_type='fine_tuning',
-                auprc=auprcs[0], 
-                f_score=f_scores[0])
+                error_type='knn',
+                auprc=knn_auprcs[0], 
+                f_score=knn_f_scores[0])
+        nln_auprcs, nln_f_scores, _ = compute_metrics(targets, mse, multiclass=False)
+        print("N:{}, KNN_AUPRC: {:.4f}, KNN_F2: {:.4f}".format(N,nln_auprcs[0],nln_f_scores[0]))
+        save_results(args, 
+                anomaly=anomaly,
+                epoch=args.epochs,
+                neighbour=N,
+                beta=2, 
+                error_type='nln',
+                auprc=nln_auprcs[0], 
+                f_score=nln_f_scores[0])
 
-        print("Epoch {}: N:{}, AUROC: {:.4f}, AUPRC: {:.4f}, F1: {:.4f}".format(args.epochs,
-                                                                                n,
-                                                                                auroc,
-                                                                                auprc,
-                                                                                f1))
+        comb = 0.5*dists + 0.5*mse
+        auprcs, f_scores, tholds  = compute_metrics(targets, comb, multiclass=False)
+        print("N:{}, SUM_AUPRC: {:.4f}, SUM_F2: {:.4f}".format(N,auprcs[0],f_scores[0]))
+    return comb, tholds[0]
 
-            #save_results(args, 
-            #        anomaly=anomaly,
-            #        epoch=args.epochs,
-            #        neighbour=n,
-            #        auroc=auroc, 
-            #        auprc=auprc, 
-            #        f1_score=f1)
+

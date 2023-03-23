@@ -50,7 +50,7 @@ def fine_tune(
     supervised_train_dataloader.dataset.set_supervision(False)
     prev_acc = 0
 
-    for epoch in range(1, 51):
+    for epoch in range(1, 2):#51):
         with tqdm(supervised_train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc  = 0.0,0.0
             for _data, _target, _, _  in tepoch:
@@ -91,4 +91,4 @@ def fine_tune(
                        train_accuracies=accuracies,
                        descriptor='finetune')
 
-    return classification_head 
+    return backbone, classification_head 

@@ -4,7 +4,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import numpy as np
 import pandas as pd
 import os
-from utils.data import reconstruct
+from utils.data import reconstruct, defaults
 
 def imscatter(z:np.array, inputs:np.array, path:str, epoch:int, ax=None, zoom=1)->None:
     """
@@ -76,7 +76,7 @@ def knn_io(n_plots:int,
     D = np.stack([_D[:,i].reshape(len(_D[:,i])//int(defaults.SIZE[0]//args.patch_size)**2 ,
                                                int(defaults.SIZE[0]//args.patch_size),
                                                int(defaults.SIZE[0]//args.patch_size))
-                            for i in range(neighbours.shape[1])])
+                            for i in range(np.max(args.neighbours))])
 
     _min, _max = np.percentile(D, [1,99])
     D = np.clip(D,_min, _max)
@@ -87,13 +87,9 @@ def knn_io(n_plots:int,
         os.makedirs(_dir)
 
     for _ in range(10):
-        i = np.random.randint(len(x_test))
-
-        while labels[i] == '':
-            i = np.random.randint(len(x_test))
-
-        fig,axs = plt.subplots(3,neighbours.shape[0]+1,figsize=(10,5));
-        axs[0][0].imshow(x_test[i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+        i = np.random.randint(len(x_recon))
+        fig,axs = plt.subplots(3,np.max(args.neighbours)+1,figsize=(10,5));
+        axs[0][0].imshow(x_recon[i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
         axs[0][0].set_title("Input", fontsize=5)
         axs[0][0].axis('off')
         axs[1][0].axis('off')
@@ -101,18 +97,17 @@ def knn_io(n_plots:int,
         axs[2][0].imshow(x_hat_recon[i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
         axs[2][0].set_title("0th Recon", fontsize=5)
         axs[2][0].axis('off')
-        for n in range(neighbours.shape[0]):
-            axs[0][n+1].imshow(neighbours[n,i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+        for n in range(np.max(args.neighbours)):
+            axs[0][n+1].imshow(neighbours_recon[n,i,0,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
             axs[0][n+1].set_title("{}".format(labels[i]), fontsize=5)
             axs[0][n+1].axis('off')
-
             axs[1][n+1].imshow(D[n,i,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
             axs[1][n+1].set_title("{}".format(round(np.mean(D[n,i,...]),3)), fontsize=5)
             axs[1][n+1].axis('off')
 
-            axs[2][n+1].imshow(D[n,i,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
-            axs[2][n+1].set_title("{}".format(round(np.mean(D[n,i,...]),3)), fontsize=5)
-            axs[2][n+1].axis('off')
+            #axs[2][n+1].imshow(D[n,i,...], aspect='auto', interpolation='nearest', vmin=0,vmax=1)
+            #axs[2][n+1].set_title("{}".format(round(np.mean(D[n,i,...]),3)), fontsize=5)
+            #axs[2][n+1].axis('off')
 
         plt.savefig('{}/{}_{}'.format(_dir, anomaly, i),dpi=96)
         plt.close('all')

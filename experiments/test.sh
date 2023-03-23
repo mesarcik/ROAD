@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "Logging for hyperparams.sh at time: $(date)." >> log.log
 limit=None
-epochs=1
+epochs=100
 seed=42 #$(openssl rand -hex 3)
 model=ssl
 latent_dim=64
