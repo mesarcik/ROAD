@@ -1,5 +1,5 @@
 """
-    Used from https://github.com/AntixK/PyTorch-VAE
+    Taken from https://github.com/AntixK/PyTorch-VAE
 """
 import torch
 from torch import nn
@@ -172,3 +172,14 @@ class VAE(nn.Module):
         """
 
         return self.forward(x)[0]
+
+    def save(self, args):
+        fpath = self.fpath_from_name(args)
+        torch.save(self.state_dict(), fpath)
+
+    def load(self, args):
+        fpath = self.fpath_from_name(args)
+        self.load_state_dict(torch.load(fpath))
+
+    def fpath_from_name(self,args)->str:
+        return f'outputs/{args.model}/{args.model_name}/vae_{args.ood}_{args.seed}_{args.pretrain}.pkl'

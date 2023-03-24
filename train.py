@@ -12,7 +12,9 @@ from utils.data import combine
 from utils.vis import imscatter, io, loss_curve
 
 
-def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
+def train_vae(train_dataloader: DataLoader, 
+              vae: VAE, 
+              args: args) -> VAE:
     """
         Trains VAE
 
@@ -25,7 +27,6 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
         Returns
         -------
         data: list of baselines with single channels removed
-
     """
     model_path = 'outputs/{}/{}'.format(args.model,
                                            args.model_name)
@@ -60,7 +61,7 @@ def train_vae(train_dataloader: DataLoader, vae: VAE, args: args) -> VAE:
             train_loss.append(running_loss / total_step)
 
             if epoch % 50 == 0:  # TODO: check for model improvement
-                torch.save(vae.state_dict(), '{}/vae.pt'.format(model_path))
+                vae.save(args)
                 vae.eval()
                 mu, log_var = vae.encode(_data)
                 Z = vae.reparameterize(mu, log_var).cpu().detach().numpy()
@@ -277,13 +278,11 @@ def train_ssl(train_dataloader: DataLoader,
 
             validation_accuracies.append(running_acc/ total_step)
 
-            if epoch % 50 == 0:  # TODO: check for model improvement
-                # print validation loss
-                if val_acc_context>prev_acc:
-                    prev_acc = val_acc_context
-                    backbone.save(args)
-                    decoder.save(args)
-                    position_classifier.save(args)
+            if val_acc_context>prev_acc:
+                prev_acc = val_acc_context
+                backbone.save(args)
+                decoder.save(args)
+                position_classifier.save(args)
 
             loss_curve(model_path,
                        epoch,

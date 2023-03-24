@@ -39,10 +39,10 @@ if args.model == 'vae':
             patch_size=args.patch_size,
             hidden_dims=args.hidden_dims)
     if args.load_model:
-        vae.load_state_dict(torch.load(f'outputs/vae/{args.model_name}/vae.pt'))
+        vae.load(args)
     else:
         vae = train_vae(train_dataloader, vae, args)
-    #eval_vae(vae, train_dataloader, test_dataloader, args, error='nln')
+    pred, thr = eval_knn(vae, decoder=None, test_dataloader, train_dataloader, args)
 
 elif args.model in ('supervised', 'all'):
     backbone = BackBone(in_channels=4,

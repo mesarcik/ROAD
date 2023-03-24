@@ -351,10 +351,15 @@ def eval_knn(backbone: BackBone,
         -------
         predictions: boolean predictions
     """
-    backbone.to(args.device, dtype=torch.bfloat16)
-    decoder.to(args.device, dtype=torch.bfloat16)
-    backbone.eval()
-    decoder.eval()
+    if args.model == 'vae':
+        backbone.to(args.device, dtype=torch.bfloat16)
+        backbone.eval()
+
+    else:
+        backbone.to(args.device, dtype=torch.bfloat16)
+        decoder.to(args.device, dtype=torch.bfloat16)
+        backbone.eval()
+        decoder.eval()
 
     test_dataloader.dataset.set_supervision(False)
     train_dataloader.dataset.set_supervision(False)
@@ -362,8 +367,12 @@ def eval_knn(backbone: BackBone,
     z_train, x_train, x_hat = [],[],[]
     for _data, _target, _ ,_ in train_dataloader:
         _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-        _z = backbone(_data)
-        _x_hat = decoder(_z)
+        if args.models == 'vae':
+            [_x_hat, _input, _mu, _log_var] = backbone(_data)
+            _z = backbone.reparameterize(_mu, _log_var)
+        else:
+            _z = backbone(_data)
+            _x_hat = decoder(_z)
 
         z_train.append(_z.float().cpu().detach().numpy())
         x_train.append(_data.float().cpu().detach().numpy())
@@ -380,7 +389,11 @@ def eval_knn(backbone: BackBone,
         test_dataloader.dataset.set_anomaly_mask(anomaly)
         for _data, _target, _ ,_ in test_dataloader:
             _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-            _z = backbone(_data)
+            if model == 'vae':
+                [_x_hat, _input, _mu, _log_var] = backbone(_data)
+                _z = backbone.reparameterize(_mu, _log_var)
+            else:
+                _z = backbone(_data)
 
             z_test.append(_z.float().cpu().detach().numpy())
             x_test.append(_data.float().cpu().detach().numpy())

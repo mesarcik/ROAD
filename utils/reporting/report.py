@@ -2,8 +2,17 @@ import os
 import pandas as pd
 from utils import args
 
-def save_results(args:args,**kwargs):
-    # get AUPRC, F-Beta and save into csv 
+def save_results(args:args,**kwargs)->None:
+    """
+        Gets AUPRC, F-Beta and save into csv 
+
+        Parameters
+        ----------
+        args:  cmd argument 
+        kwargs: 
+
+
+    """
     if not os.path.exists(args.output_path):
         df = pd.DataFrame(columns = ['Model',
                                      'Name',
