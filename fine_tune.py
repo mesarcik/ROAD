@@ -7,6 +7,7 @@ from torch import nn
 from utils.vis import imscatter, io, loss_curve
 from utils.data import defaults, combine
 from models import BackBone, ClassificationHead
+from eval import compute_metrics
 
 def fine_tune(
         supervised_train_dataloader: DataLoader,
@@ -20,7 +21,7 @@ def fine_tune(
         Parameters
         ----------
         supervised_train_dataloader: dataloader
-        val_dataset: validation dataset
+        val_dataset: supervised validation dataset
         backbone:backbone
         classification_head: classifcation head
         args: runtime arguments
@@ -42,15 +43,17 @@ def fine_tune(
 
     optimizer = torch.optim.Adam(
         list(classification_head.parameters())+list(backbone.parameters()),
-        lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
+        lr=1e-4)  # , lr=0.0001, momentum=0.9)
 
     total_train_loss = []
     accuracies= []
     total_step = len(supervised_train_dataloader)
     supervised_train_dataloader.dataset.set_supervision(False)
+    _val_data = val_dataset.data.float().to(args.device, dtype=torch.bfloat16)
+    _val_targets = val_dataset.labels
     prev_acc = 0
 
-    for epoch in range(1, 2):#51):
+    for epoch in range(1, 51):
         with tqdm(supervised_train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc  = 0.0,0.0
             for _data, _target, _, _  in tepoch:
@@ -71,8 +74,13 @@ def fine_tune(
                 optimizer.step()
                 running_loss += loss.item()
 
-                val_acc = torch.sum(_c == _labels) / _labels.shape[0]
-                running_acc += val_acc.cpu().detach()
+                auprc, f_score, _ = compute_metrics(_target.cpu().detach().numpy(), 
+                                                _c.float().cpu().detach().numpy(),
+                                                beta=2,
+                                                multiclass=False)
+                val_acc = f_score[0]
+                #val_acc = torch.sum(_c == _labels) / _labels.shape[0]
+                running_acc += val_acc
 
                 tepoch.set_postfix(total_loss=loss.item(), 
                                    train_accuracy=val_acc.item())
@@ -80,9 +88,9 @@ def fine_tune(
             total_train_loss.append(running_loss / total_step)
             accuracies.append(running_acc/ total_step)
 
-            if prev_acc > accuracies[-1]:  # TODO: check for model improvement
+            if prev_acc < accuracies[-1]:  # TODO: check for model improvement
                 classification_head.save(args)
-                backbone.save(args)
+                #backbone.save(args)
                 prev_acc=accuracies[-1]
 
             loss_curve(model_path,

@@ -103,7 +103,7 @@ def compute_metrics(targets:np.array,
     else:
 
         precision, recall, thresholds = precision_recall_curve(targets!=len(defaults.anomalies), 
-                predictions!=len(defaults.anomalies))
+                predictions)
         auprcs.append(auc(recall, precision))
 
         f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*recall+precision))
@@ -367,7 +367,7 @@ def eval_knn(backbone: BackBone,
     z_train, x_train, x_hat = [],[],[]
     for _data, _target, _ ,_ in train_dataloader:
         _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-        if args.models == 'vae':
+        if args.model == 'vae':
             [_x_hat, _input, _mu, _log_var] = backbone(_data)
             _z = backbone.reparameterize(_mu, _log_var)
         else:
@@ -389,7 +389,7 @@ def eval_knn(backbone: BackBone,
         test_dataloader.dataset.set_anomaly_mask(anomaly)
         for _data, _target, _ ,_ in test_dataloader:
             _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
-            if model == 'vae':
+            if args.model == 'vae':
                 [_x_hat, _input, _mu, _log_var] = backbone(_data)
                 _z = backbone.reparameterize(_mu, _log_var)
             else:

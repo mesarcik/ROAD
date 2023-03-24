@@ -42,7 +42,7 @@ if args.model == 'vae':
         vae.load(args)
     else:
         vae = train_vae(train_dataloader, vae, args)
-    pred, thr = eval_knn(vae, decoder=None, test_dataloader, train_dataloader, args)
+    pred, thr = eval_knn(vae, None, test_dataloader, train_dataloader, args)
 
 elif args.model in ('supervised', 'all'):
     backbone = BackBone(in_channels=4,
@@ -82,15 +82,15 @@ elif args.model in ('ssl', 'all'):
                 decoder,
                 args)
         backbone_ft, classification_head = fine_tune(supervised_train_dataloader,
-                                        val_dataset,
+                                        supervised_val_dataset,
                                         backbone,
                                         classification_head,
                                         args)
-    pred, thr = eval_classification_head(backbone_ft, classification_head, test_dataloader, args)
-    pred, thr = eval_knn(backbone, decoder, test_dataloader, train_dataloader, args)
+    pred_ft, thr_ft = eval_classification_head(backbone_ft, classification_head, test_dataloader, args)
+    pred_knn, thr_knn = eval_knn(backbone, decoder, test_dataloader, train_dataloader, args)
 
     if args.model  == 'all':
-        pred, thr = eval_supervised(backbone, test_dataloader, args,  pred, thr)
+        pred, thr = eval_supervised(backbone, test_dataloader, args,  pred_ft, thr_ft)
 
 
     ##plot_results(args.output_path,
