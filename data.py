@@ -34,7 +34,7 @@ def get_data(args, remove=None, transform=None):
                                                  _labels,
                                                  _frequency_band, 
                                                  _source,
-                                                 test_size=0.02, 
+                                                 test_size=0.05, 
                                                  random_state=args.seed)
 
     supervised_train_dataset = LOFARDataset(train_data, 

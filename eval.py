@@ -133,14 +133,14 @@ def combine_predictions(supervised_pred:np.array,
     unknown_anomaly = len(defaults.anomalies)+1
     combined_predictions = []
 
-    for sup_p, ssl_p in zip(supervised_pred, ssl_pred):
-        if ssl_p<threshold: # mask is true for anomalies 
+    for sup, ssl in zip(supervised_pred, ssl_pred):
+        if ssl<threshold: # mask is true for anomalies 
             combined_predictions.append(len(defaults.anomalies))
-        elif ssl_p>=threshold and sup_p==len(defaults.anomalies):
+        elif ssl>=threshold and sup==len(defaults.anomalies):
             combined_predictions.append(unknown_anomaly)
-        elif ssl_p>=threshold and p!= len(defaults.anomalies):
-            combined_predictions.append(sup_p)
-    return combined_predictions
+        elif ssl>=threshold and sup!= len(defaults.anomalies):
+            combined_predictions.append(sup)
+    return np.array(combined_predictions)
 
 def eval_vae(vae:VAE, 
             train_dataloader: DataLoader, 
@@ -245,6 +245,7 @@ def eval_supervised(backbone:BackBone,
         predictions: predictions
         thresholds: thresholds 
     """
+    output_label = 'supervisd'
     backbone.to(args.device, dtype=torch.bfloat16)
     backbone.eval()
     test_dataloader.dataset.set_supervision(True)
@@ -259,9 +260,10 @@ def eval_supervised(backbone:BackBone,
         targets.extend(_target.numpy().flatten())
         
     predictions, targets = np.array(predictions), np.array(targets)
-
     if ssl_predictions is not None and ssl_threshold is not None:
         predictions = combine_predictions(predictions, ssl_predictions, ssl_threshold)
+        output_label = 'ssl'
+
 
     auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=True)
     anomalies = copy.deepcopy(defaults.anomalies)
@@ -273,7 +275,7 @@ def eval_supervised(backbone:BackBone,
                 epoch=args.epochs,
                 neighbour=-1,
                 beta=2, 
-                error_type='None',
+                error_type=output_label,
                 auprc=auprcs[i], 
                 f_score=f_scores[i])
     return predictions, tholds
@@ -312,15 +314,16 @@ def eval_classification_head(backbone:BackBone,
         Z = _z.reshape([len(_z)//int(defaults.SIZE[0]//args.patch_size)**2, 
                         args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
         c = classification_head(Z)
-        c = c.argmax(dim=-1).cpu().detach()
+        c = c.squeeze(1).cpu().detach()
 
-        predictions.extend(c.numpy().flatten())
+        predictions.extend(c.float().numpy().flatten())
         targets.extend(_target[:,0].numpy().flatten())
         
     predictions, targets = np.array(predictions), np.array(targets)
-    auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=True)
+    auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=False)
+    print("AUPRC: {:.4f}, F2: {:.4f}".format(auprcs[0],f_scores[0]))
     save_results(args, 
-            anomaly='anomaly',
+            anomaly='-1',
             epoch=args.epochs,
             neighbour=-1,
             beta=2, 

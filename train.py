@@ -156,6 +156,7 @@ def train_supervised(
                        validation_accuracy=validation_accuracies,
                        descriptor='resnet')
             backbone.train()
+    backbone.load(args)
     return backbone 
 
 def train_ssl(train_dataloader: DataLoader,
@@ -297,4 +298,7 @@ def train_ssl(train_dataloader: DataLoader,
         for arg in args.__dict__:
             fp.write('{}: {}\n'.format(arg, args.__dict__[arg]))
 
+    backbone.load(args)
+    position_classifier.load(args)
+    decoder.load(args)
     return backbone, position_classifier, decoder
