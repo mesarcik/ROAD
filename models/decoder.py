@@ -5,14 +5,18 @@ import numpy as np
 import os
 
 class Decoder(nn.Module):
-    def __init__(self, out_channels:int, patch_size:int, latent_dim:int):
+    def __init__(self, 
+            out_channels:int, 
+            patch_size:int, 
+            latent_dim:int,
+            n_layers:int):
         super().__init__()
 
         self.out_channels = out_channels
         self.patch_size = patch_size
         self.latent_dim = latent_dim
-        self.n_layers =  3#int(np.log2(self.patch_size**2//self.patch_size))
-        #self.hidden_dims  = [self.patch_size*2**i for i in range(self.n_layers)]
+        self.n_layers =  n_layers
+
         self.hidden_dims  = [2**(2+i) for i in range(self.n_layers)]
         modules  = []
 
@@ -51,31 +55,29 @@ class Decoder(nn.Module):
                             nn.Tanh()))
 
         self.decoder = nn.Sequential(*modules)
+        self.loss_fn = nn.MSELoss()
 
-        self.loss_fn = nn.CrossEntropyLoss()
-
-    def save(self, name):
-        fpath = self.fpath_from_name(name)
-        if not os.path.exists(fpath):
-            os.makedirs(fpath)
+    def save(self, args):
+        fpath = self.fpath_from_name(args)
         torch.save(self.state_dict(), fpath)
 
-    def load(self, name):
-        fpath = self.fpath_from_name(name)
+    def load(self, args):
+        fpath = self.fpath_from_name(args)
         self.load_state_dict(torch.load(fpath))
 
-    def fpath_from_name(self, name):
-        return f'ckpts/{name}/position_classifier.pkl'
+    def fpath_from_name(self,args)->str:
+        return f'outputs/models/{args.model_name}/decoder_{args.ood}_{args.seed}_{args.pretrain}.pkl'
+
 
     def loss_function(self,
                       pred:torch.tensor,
-                      labels:torch.tensor) -> dict:
+                      labels:torch.tensor) -> torch.tensor:
         loss = self.loss_fn(pred, labels)
 
-        return {'loss':loss}
+        return loss
 
-    def forward(self, input:torch.tensor):
-
+    def forward(self, 
+            input:torch.tensor)->torch.tensor:
         x = self.decoder_input(input)
         x = x.view(-1, self.hidden_dims[0], self.intermediate, self.intermediate)
         x = self.decoder(x)

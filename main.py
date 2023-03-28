@@ -1,75 +1,103 @@
 import torch
-from torchvision import transforms
 from torch.utils.data import DataLoader
 
 import numpy as np
-import matplotlib.pyplot as plt
-from utils.vis import imscatter
 from utils.args import args
 from utils.data import defaults
-import os
-import gc
 
 from data import get_data
-from models import VAE, ResNet, PositionClassifier, Decoder, ClassificationHead
-from train import train_vae, train_resnet, train_position_classifier
-from eval import eval_vae, eval_resnet
+from models import VAE, BackBone, PositionClassifier, Decoder, ClassificationHead
+from train import train_vae, train_supervised, train_ssl
+from fine_tune import fine_tune
+from eval import eval_vae, eval_supervised, eval_classification_head, eval_knn
 from utils import plot_results
 
 
-def main():
-    print(args.model_name)
-    transform = None#transforms.Compose([transforms.RandomResizedCrop(size=(args.patch_size, args.patch_size),
-                #                                                 scale=(0.5, 1.0)),  
-                #                    transforms.RandomHorizontalFlip(p=0.5),
-                #                    transforms.RandomVerticalFlip(p=0.5),
-                #                    ])
-    (train_dataset, val_dataset, test_dataset, _, _) = get_data(args, transform=transform)   
+print(args.model_name)
+(train_dataset,
+        val_dataset,
+        test_dataset,
+        supervised_train_dataset,
+        supervised_val_dataset)= get_data(args)
 
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size=args.batch_size,
-                                  shuffle=True)
+train_dataloader = DataLoader(train_dataset,
+                              batch_size=args.batch_size,
+                              shuffle=True)
 
-    test_dataloader = DataLoader(test_dataset,
-                                 batch_size=args.batch_size,
-                                 shuffle=False)
+supervised_train_dataloader = DataLoader(supervised_train_dataset,
+                              batch_size=args.batch_size,
+                              shuffle=True)
 
-    if args.model == 'vae':
-        vae = VAE(in_channels=4,
-                  latent_dim=args.latent_dim,
-                  patch_size=args.patch_size,
-                  hidden_dims=args.hidden_dims)
-        if args.load_model:
-            vae.load_state_dict(torch.load('outputs/vae/{}/vae.pt'.format(args.model_name)))
-        else:
-            vae = train_vae(train_dataloader, vae, args)
-        eval_vae(vae, train_dataloader, test_dataloader, args, error='nln')
+test_dataloader = DataLoader(test_dataset,
+                             batch_size=args.batch_size,
+                             shuffle=False)
+test_dataloader.dataset.set_seed(np.random.randint(100))
 
-    elif args.model == 'resnet':
-        resnet = ResNet(dim=test_dataset.n_patches**2, in_channels=4)
-        resnet = train_resnet(train_dataloader, val_dataset, resnet, args)
-        if args.load_model:
-            resnet.load_state_dict(torch.load('outputs/resnet/{}/resnet.pt'.format(args.model_name)))
-        eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
+if args.model == 'vae':
+    vae = VAE(in_channels=4,
+            latent_dim=args.latent_dim,
+            patch_size=args.patch_size,
+            hidden_dims=args.hidden_dims)
+    if args.load_model:
+        vae.load(args)
+    else:
+        vae = train_vae(train_dataloader, vae, args)
+    pred, thr = eval_knn(vae, None, test_dataloader, train_dataloader, args)
 
-    elif args.model == 'position_classifier':
-        resnet = ResNet(out_dims=8,in_channels=4, latent_dim=args.latent_dim)
-        classifier = PositionClassifier(in_dims=2*args.latent_dim, out_dims=3)
-        if args.load_model:
-            resnet.load_state_dict(torch.load('outputs/position_classifier/{}/resnet.pt'.format(args.model_name)))
-            classifier.load_state_dict(torch.load('outputs/position_classifier/{}/classifier.pt'.format(args.model_name)))
-        else:
-            resnet = train_position_classifier(train_dataloader, val_dataset, resnet, classifier, args)
+elif args.model in ('supervised', 'all'):
+    supervised_backbone = BackBone(in_channels=4,
+            out_dims=len(defaults.anomalies)+1,
+            model_type='resnet50')
+    if args.load_model:
+        supervised_backbone.load(args,'supervised')
+    else:
+        supervised_backbone = train_supervised(supervised_train_dataloader,
+                supervised_val_dataset,
+                supervised_backbone,
+                args)
+    pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
 
-        for i in range(10):
-            test_dataloader.dataset.set_seed(np.random.randint(100))
-            eval_resnet(resnet, train_dataloader, test_dataloader, args, error='nln')
-        plot_results(args.output_path,
-                    f'outputs/{args.model}/{args.model_name}',  
-                    args.model_name,
-                    np.max(args.neighbours))
+if args.model in ('ssl', 'all'):
+    ssl_backbone = BackBone(in_channels=4,
+            out_dims=args.latent_dim,
+            model_type=args.backbone)
+    position_classifier = PositionClassifier(latent_dim=args.latent_dim,
+            out_dims=8)
+    decoder = Decoder(out_channels=4,
+                     patch_size=args.patch_size,
+                     latent_dim=args.latent_dim,
+                     n_layers=5)
+    classification_head =  ClassificationHead(out_dims=1,
+                                                latent_dim= args.latent_dim)
+    if args.load_model:
+        ssl_backbone.load(args, 'ssl', ft=True)
+        position_classifier.load(args)
+        decoder.load(args)
+        classification_head.load(args)
+    else:
+        ssl_backbone, position_classifier, decoder = train_ssl(train_dataloader,
+                val_dataset,
+                ssl_backbone,
+                position_classifier,
+                decoder,
+                args)
+
+        pred_knn, thr_knn = eval_knn(ssl_backbone, decoder, test_dataloader, train_dataloader, args)
+
+        ssl_backbone, classification_head = fine_tune(supervised_train_dataloader,
+                                        supervised_val_dataset,
+                                        test_dataloader,
+                                        backbone,
+                                        classification_head,
+                                        args)
+
+    pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
+
+if args.model  == 'all':
+    pred, thr = eval_supervised(supervised_backbone, test_dataloader, args,  pred_ft, thr_ft)
 
 
-
-if __name__ == '__main__':
-    main()
+    ##plot_results(args.output_path,
+    ##            f'outputs/{args.model}/{args.model_name}',  
+    ##            args.model_name,
+    ##            np.max(args.neighbours))

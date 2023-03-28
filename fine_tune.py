@@ -1,28 +1,30 @@
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import os
 from torch import nn
 
 from utils.vis import imscatter, io, loss_curve
-from utils.data import SIZE
-from eval import eval_finetune
+from utils.data import defaults, combine
+from models import BackBone, ClassificationHead
+from eval import compute_metrics, eval_classification_head
 
 def fine_tune(
-        train_dataloader: DataLoader,
-        test_dataloader: DataLoader,
-        resnet,
-        classification_head,
+        supervised_train_dataloader: DataLoader,
+        val_dataset:Dataset,
+        test_dataloader:DataLoader,
+        backbone:BackBone,
+        classification_head:ClassificationHead,
         args):
     """
         Fine tunes classification head
 
         Parameters
         ----------
-        train_dataloader: dataloader
-        val_dataset: validation dataset
-        resnet:resnet
-        classification_head: classifcaiotn head
+        supervised_train_dataloader: dataloader
+        val_dataset: supervised validation dataset
+        backbone:backbone
+        classification_head: classifcation head
         args: runtime arguments
 
         Returns
@@ -34,71 +36,85 @@ def fine_tune(
                                            args.model_name)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
-    
-    resnet.eval()
-    classification_head.train()
-    resnet.to(args.device)
-    classification_head.to(args.device)
 
-    classification_head_optimizer = torch.optim.Adam(
-        classification_head.parameters(),
-        lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
+    backbone.train()
+    classification_head.train()
+    backbone.to(args.device, dtype=torch.bfloat16)
+    classification_head.to(args.device, dtype=torch.bfloat16)
+
+    optimizer = torch.optim.Adam(
+        list(classification_head.parameters())+list(backbone.parameters()),
+        lr=1e-4)  # , lr=0.0001, momentum=0.9)
 
     total_train_loss = []
     accuracies= []
-    total_step = len(train_dataloader)
-
+    total_step = len(supervised_train_dataloader)
+    supervised_train_dataloader.dataset.set_supervision(False)
+    _val_data = val_dataset.patch(val_dataset.data).float().to(args.device, dtype=torch.bfloat16)
+    _val_targets = val_dataset.labels !=len(defaults.anomalies)
+    prev_acc = 0
 
     for epoch in range(1, 51):
-        with tqdm(train_dataloader, unit="batch") as tepoch:
-            running_loss = 0.0
-            running_acc = 0.0
-            for _data, _target, _, _, _, _ in tepoch:
-                if _data.shape[0] != args.batch_size: continue
+        with tqdm(supervised_train_dataloader, unit="batch") as tepoch:
+            running_loss, running_acc  = 0.0,0.0
+            for _data, _target, _, _  in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
+                _data = combine(_data,0,2).float().to(args.device, dtype=torch.bfloat16)
+                _target = _target[:,0].to(args.device, dtype=torch.long)
 
-                _target = _target.type(torch.LongTensor).to(args.device)
-                _data = _data.type(torch.FloatTensor).to(args.device)
+                optimizer.zero_grad()
 
-                classification_head_optimizer.zero_grad()
-
-                _z = resnet.embed(_data)
-                _z = _z.view(_z.shape[0]//(SIZE[0]//args.patch_size)**2,
-                                ((SIZE[0]//args.patch_size)**2)*args.latent_dim)
-                _c = classification_head(_z)#.argmax(dim=-1).type(torch.FloatTensor).to(args.device)
-                _target = _target[::(SIZE[0]//args.patch_size)**2]
-
-                loss = classification_head.loss_fn(_c, _target)
+                _z = backbone(_data)
+                Z = _z.reshape([len(_z)//int(defaults.SIZE[0]//args.patch_size)**2, 
+                                args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
+                _c = classification_head(Z).squeeze(1)
+                _labels = _target!=len(defaults.anomalies)
+                loss = classification_head.loss_fn(_c,_labels.to(args.device, dtype=torch.bfloat16))
 
                 loss.backward()
-                classification_head_optimizer.step()
+                optimizer.step()
                 running_loss += loss.item()
 
-                val_acc = torch.sum(
-                    _c.argmax(
-                        dim=-1) == _target) / _target.shape[0]
-                running_acc += val_acc.cpu().detach()
+                ####
+                backbone.eval()
+                classification_head.eval()
+                _z = backbone(_val_data)
+                Z = _z.reshape([len(_z)//int(defaults.SIZE[0]//args.patch_size)**2, 
+                                args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
+                _c = classification_head(Z).squeeze(1)
+                backbone.train()
+                classification_head.train()
+
+                auprc, f_score, _ = compute_metrics(_val_targets.numpy(), 
+                                                _c.float().cpu().detach().numpy(),
+                                                beta=2,
+                                                multiclass=False)
+                val_acc = f_score[0]
+                #val_acc = torch.sum(_c == _labels) / _labels.shape[0]
+                running_acc += val_acc
 
                 tepoch.set_postfix(total_loss=loss.item(), 
                                    train_accuracy=val_acc.item())
 
             total_train_loss.append(running_loss / total_step)
-
             accuracies.append(running_acc/ total_step)
 
-            if epoch % 10 == 0:  # TODO: check for model improvement
-                torch.save(
-                    classification_head.state_dict(),
-                    '{}/classification_head.pt'.format(model_path))
-
-                with open('{}/model.config'.format(model_path), 'w') as fp:
-                    for arg in args.__dict__:
-                        fp.write('{}: {}\n'.format(arg, args.__dict__[arg]))
+            #if prev_acc < accuracies[-1]:  # TODO: check for model improvement, validation size too small
+            classification_head.save(args)
+            backbone.save(args,ft=True)
+            prev_acc=accuracies[-1]
+            backbone.eval()
+            classification_head.eval()
+            pred_ft, thr_ft = eval_classification_head(backbone.cpu(), classification_head.cpu(), test_dataloader, args)
 
             loss_curve(model_path,
                        epoch,
                        total_loss=total_train_loss,
                        train_accuracies=accuracies,
                        descriptor='finetune')
+            backbone.train()
+            classification_head.train()
 
-    return classification_head 
+    classification_head.load(args)
+    backbone.load(args,ft=True)
+    return backbone, classification_head 

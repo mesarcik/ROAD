@@ -34,7 +34,7 @@ def get_data(args, remove=None, transform=None):
                                                  _labels,
                                                  _frequency_band, 
                                                  _source,
-                                                 test_size=0.02, 
+                                                 test_size=0.05, 
                                                  random_state=args.seed)
 
     supervised_train_dataset = LOFARDataset(train_data, 
@@ -193,16 +193,15 @@ class LOFARDataset(Dataset):
         else:
             label = np.repeat(self.labels[idx], self.n_patches**2, axis=0)
             datum =  self.patch(self.data[idx:idx+1,...])
-            frequency = np.random.random(len(label))#self.patch(self._frequency_band[idx])[0,0,[0,-1]]#TODO fix frequncy encoding
+            #frequency = np.random.random(len(label))#self.patch(self._frequency_band[idx])[0,0,[0,-1]]#TODO fix frequncy encoding
 
             (context_label, 
-             context_image_neighbour,
-             context_frequency_neighbour) = self.context_prediction(datum)
+             context_image_neighbour) = self.context_prediction(datum)
 
             if self.transform:
                 datum = self.transform(datum)
 
-            return datum, label, frequency, context_label, context_image_neighbour, context_frequency_neighbour
+            return datum, label, context_label, context_image_neighbour 
 
 
     def set_supervision(self, supervised:bool)->None:
@@ -401,7 +400,7 @@ class LOFARDataset(Dataset):
                 self.args.patch_size)
         return patches
 
-    def context_prediction(self, data:torch.tensor) -> (torch.tensor, torch.tensor, torch.tensor):
+    def context_prediction(self, data:torch.tensor) -> (torch.tensor, torch.tensor):
         """
             Arranges a context prediction dataset
             
@@ -420,7 +419,6 @@ class LOFARDataset(Dataset):
                                              data.shape[1],
                                              self.args.patch_size, 
                                              self.args.patch_size],dtype='float32')
-        context_frequency_neighbour = np.zeros([data.shape[0]],dtype='int')
         _indx = 0
         _locations = [-self.n_patches-1, -self.n_patches, -self.n_patches+1, -1, +1, +self.n_patches-1, +self.n_patches, +self.n_patches+1]
 
@@ -494,11 +492,9 @@ class LOFARDataset(Dataset):
                     #[-1               ,       X        ,                 1]
                     #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
                 context_images_neighbour[_indx,:] = temp_patches[_patch_index + _locations[context_labels[_indx]]]
-                context_frequency_neighbour[_indx] = temp_freq[context_labels[_indx]]
                 _indx +=1
         context_labels = torch.from_numpy(context_labels)
         context_images_neighbour = torch.from_numpy(context_images_neighbour)
-        context_frequency_neighbour= torch.from_numpy(context_frequency_neighbour)
 
-        return context_labels, context_images_neighbour, context_frequency_neighbour
+        return context_labels, context_images_neighbour 
 

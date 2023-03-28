@@ -8,9 +8,9 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Radio Astronomy Anomaly Detection (RAAD)')
 
-parser.add_argument('-model',metavar='-m', type=str, default='vae', choices={'vae', 'resnet', 'position_classifier'}, help = 'Model to train and evaluate')
+parser.add_argument('-model',metavar='-m', type=str, default='vae', choices={'vae', 'supervised', 'ssl', 'all'}, help = 'Model to train and evaluate')
 parser.add_argument('-limit',metavar='-l', type=str, default='None', help = 'Limit on the number of samples in training data ')
-parser.add_argument('-anomaly_class',metavar='-a', type=str,  default='lightning', help = 'The label of the anomalous class')
+parser.add_argument('-ood',metavar='-oo', type=int,  default=-1, help = 'The label of the anomalous class')
 parser.add_argument('-epochs', metavar='-e', type=int, default=100, help = 'The number of epochs for training')
 parser.add_argument('-latent_dim', metavar='-ld', type=int, default=2, help = 'The latent dimension size of the AE based models')
 parser.add_argument('-neighbours', metavar='-n', nargs='+',type=int, default=[2,5,10], help = 'The maximum number of neighbours for latent anomaly detection')
@@ -27,6 +27,8 @@ parser.add_argument('-amount', metavar='-am', type=float, default=0.1, help = 'A
 parser.add_argument('-model_name', metavar='-mn', type=str, default=None, help = 'Model name for loading')
 parser.add_argument('-fine_tune', metavar='-ft', type=bool, default=True, help = 'Use pretrained models for finetuning')
 parser.add_argument('-kernel_size', metavar='-ks', type=int, default=3,  choices={3,5}, help = 'Kernel size of context prediction')
+parser.add_argument('-backbone',metavar='-bb', type=str, default='resnet50', choices={'resnet18', 'resnet50', 'resnet101', 'resnet152','convnext','vit'}, help = 'Model to train and evaluate')
+parser.add_argument('-pretrain', metavar='-pt', type=bool, default=True,  help = 'Random intialisation or pretraining')
 
 args = parser.parse_args()
 

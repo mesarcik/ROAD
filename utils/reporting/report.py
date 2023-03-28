@@ -2,8 +2,17 @@ import os
 import pandas as pd
 from utils import args
 
-def save_results(args:args,**kwargs):
-    # get AUROC, AUPRC, F1 and save into csv 
+def save_results(args:args,**kwargs)->None:
+    """
+        Gets AUPRC, F-Beta and save into csv 
+
+        Parameters
+        ----------
+        args:  cmd argument 
+        kwargs: 
+
+
+    """
     if not os.path.exists(args.output_path):
         df = pd.DataFrame(columns = ['Model',
                                      'Name',
@@ -14,9 +23,10 @@ def save_results(args:args,**kwargs):
                                      'Class',
                                      'Amount',
                                      'Neighbour',
-                                     'AUROC',
+                                     'ErrorType',
                                      'AUPRC',
-                                     'F1'])
+                                     'beta',
+                                     'F-beta'])
     else:  
         df = pd.read_csv(args.output_path)
 
@@ -30,9 +40,10 @@ def save_results(args:args,**kwargs):
                     'Class':kwargs['anomaly'],
                     'Amount':args.amount,
                     'Neighbour':kwargs['neighbour'],
-                    'AUROC':kwargs['auroc'],
+                    'ErrorType':kwargs['error_type'],
                     'AUPRC':kwargs['auprc'],
-                    'F1':kwargs['f1_score']},index=[0])],
+                    'beta':kwargs['beta'],
+                    'F-beta':kwargs['f_score']},index=[0])],
                     axis=0, join='outer', ignore_index=True)
 
     df.to_csv(args.output_path,index=False)
