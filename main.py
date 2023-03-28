@@ -45,20 +45,20 @@ if args.model == 'vae':
     pred, thr = eval_knn(vae, None, test_dataloader, train_dataloader, args)
 
 elif args.model in ('supervised', 'all'):
-    backbone = BackBone(in_channels=4,
+    supervised_backbone = BackBone(in_channels=4,
             out_dims=len(defaults.anomalies)+1,
             model_type='resnet50')
     if args.load_model:
-        backbone.load(args)
+        supervised_backbone.load(args,'supervised')
     else:
-        backbone = train_supervised(supervised_train_dataloader,
+        supervised_backbone = train_supervised(supervised_train_dataloader,
                 supervised_val_dataset,
-                backbone,
+                supervised_backbone,
                 args)
-    pred, thr = eval_supervised(backbone, test_dataloader, args)
+    pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
 
-elif args.model in ('ssl', 'all'):
-    backbone = BackBone(in_channels=4,
+if args.model in ('ssl', 'all'):
+    ssl_backbone = BackBone(in_channels=4,
             out_dims=args.latent_dim,
             model_type=args.backbone)
     position_classifier = PositionClassifier(latent_dim=args.latent_dim,
@@ -70,27 +70,31 @@ elif args.model in ('ssl', 'all'):
     classification_head =  ClassificationHead(out_dims=1,
                                                 latent_dim= args.latent_dim)
     if args.load_model:
-        backbone.load(args)
+        ssl_backbone.load(args, 'ssl', ft=True)
         position_classifier.load(args)
         decoder.load(args)
         classification_head.load(args)
     else:
-        backbone, position_classifier, decoder = train_ssl(train_dataloader,
+        ssl_backbone, position_classifier, decoder = train_ssl(train_dataloader,
                 val_dataset,
-                backbone,
+                ssl_backbone,
                 position_classifier,
                 decoder,
                 args)
-        backbone_ft, classification_head = fine_tune(supervised_train_dataloader,
+
+        pred_knn, thr_knn = eval_knn(ssl_backbone, decoder, test_dataloader, train_dataloader, args)
+
+        ssl_backbone, classification_head = fine_tune(supervised_train_dataloader,
                                         supervised_val_dataset,
+                                        test_dataloader,
                                         backbone,
                                         classification_head,
                                         args)
-    pred_ft, thr_ft = eval_classification_head(backbone_ft, classification_head, test_dataloader, args)
-    pred_knn, thr_knn = eval_knn(backbone, decoder, test_dataloader, train_dataloader, args)
 
-    if args.model  == 'all':
-        pred, thr = eval_supervised(backbone, test_dataloader, args,  pred_ft, thr_ft)
+    pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
+
+if args.model  == 'all':
+    pred, thr = eval_supervised(supervised_backbone, test_dataloader, args,  pred_ft, thr_ft)
 
 
     ##plot_results(args.output_path,

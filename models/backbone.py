@@ -28,16 +28,16 @@ class BackBone(nn.Module):
 
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def save(self, args, ft=False):
+    def save(self, args, traning, ft=False):
         fpath = self.fpath_from_name(args, ft)
         torch.save(self.state_dict(), fpath)
 
-    def load(self, args, ft=False):
+    def load(self, args, training, ft=False):
         fpath = self.fpath_from_name(args, ft)
         self.load_state_dict(torch.load(fpath))
 
-    def fpath_from_name(self,args,ft)->str:
-        return f'outputs/models/{args.model_name}/backbone_{args.ood}_{args.seed}_{args.pretrain}_{ft}.pkl'
+    def fpath_from_name(self, args, training, ft)->str:
+        return f'outputs/models/{args.model_name}/backbone_{training}_{args.ood}_{args.seed}_{args.pretrain}_{ft}.pkl'
 
     def forward(self, 
                 z: torch.tensor,

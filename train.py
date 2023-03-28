@@ -28,8 +28,7 @@ def train_vae(train_dataloader: DataLoader,
         -------
         data: list of baselines with single channels removed
     """
-    model_path = 'outputs/{}/{}'.format(args.model,
-                                           args.model_name)
+    model_path = 'outputs/models/{}'.format(args.model_name)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -99,8 +98,7 @@ def train_supervised(
         backbone: backbone 
 
     """
-    model_path = 'outputs/{}/{}'.format(args.model,
-                                           args.model_name)
+    model_path = 'outputs/models/{}'.format(args.model_name)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -147,7 +145,7 @@ def train_supervised(
             validation_accuracies.append(running_acc/ total_step)
 
             if prev_acc < validation_accuracies[-1]:
-                backbone.save(args)
+                backbone.save(args,'supervised')
                 prev_acc=validation_accuracies[-1]
 
             loss_curve(model_path,
@@ -181,8 +179,7 @@ def train_ssl(train_dataloader: DataLoader,
         model: trained resnet
 
     """
-    model_path = 'outputs/{}/{}'.format(args.model,
-                                           args.model_name)
+    model_path = 'outputs/models/{}'.format(args.model_name)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -281,7 +278,7 @@ def train_ssl(train_dataloader: DataLoader,
 
             if val_acc_context>prev_acc:
                 prev_acc = val_acc_context
-                backbone.save(args)
+                backbone.save(args,'ssl')
                 decoder.save(args)
                 position_classifier.save(args)
 

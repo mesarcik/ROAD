@@ -33,7 +33,7 @@ class ClassificationHead(nn.Module):
         self.load_state_dict(torch.load(fpath))
 
     def fpath_from_name(self,args)->str:
-        return f'outputs/{args.model}/{args.model_name}/classification_head_{args.ood}_{args.seed}_{args.pretrain}.pkl'
+        return f'outputs/models/{args.model_name}/classification_head_{args.ood}_{args.seed}_{args.pretrain}.pkl'
 
     def forward(self,
             _input: torch.tensor)->torch.tensor:
