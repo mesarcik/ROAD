@@ -47,7 +47,7 @@ if args.model == 'vae':
 elif args.model in ('supervised', 'all'):
     supervised_backbone = BackBone(in_channels=4,
             out_dims=len(defaults.anomalies)+1,
-            model_type='resnet50')
+            model_type=args.BackBone)
     if args.load_model:
         supervised_backbone.load(args,'supervised', False)
     else:
