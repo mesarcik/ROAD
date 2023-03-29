@@ -145,7 +145,7 @@ def train_supervised(
             validation_accuracies.append(running_acc/ total_step)
 
             if prev_acc < validation_accuracies[-1]:
-                backbone.save(args,'supervised')
+                backbone.save(args,'supervised', False)
                 prev_acc=validation_accuracies[-1]
 
             loss_curve(model_path,
@@ -154,7 +154,7 @@ def train_supervised(
                        validation_accuracy=validation_accuracies,
                        descriptor='resnet')
             backbone.train()
-    backbone.load(args)
+    backbone.load(args, 'supervised',False)
     return backbone 
 
 def train_ssl(train_dataloader: DataLoader,
@@ -278,7 +278,7 @@ def train_ssl(train_dataloader: DataLoader,
 
             if val_acc_context>prev_acc:
                 prev_acc = val_acc_context
-                backbone.save(args,'ssl')
+                backbone.save(args,'ssl', False)
                 decoder.save(args)
                 position_classifier.save(args)
 
@@ -295,7 +295,7 @@ def train_ssl(train_dataloader: DataLoader,
         for arg in args.__dict__:
             fp.write('{}: {}\n'.format(arg, args.__dict__[arg]))
 
-    backbone.load(args)
+    backbone.load(args, 'ssl', False)
     position_classifier.load(args)
     decoder.load(args)
     return backbone, position_classifier, decoder

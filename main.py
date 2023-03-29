@@ -49,7 +49,7 @@ elif args.model in ('supervised', 'all'):
             out_dims=len(defaults.anomalies)+1,
             model_type='resnet50')
     if args.load_model:
-        supervised_backbone.load(args,'supervised')
+        supervised_backbone.load(args,'supervised', False)
     else:
         supervised_backbone = train_supervised(supervised_train_dataloader,
                 supervised_val_dataset,
@@ -70,7 +70,7 @@ if args.model in ('ssl', 'all'):
     classification_head =  ClassificationHead(out_dims=1,
                                                 latent_dim= args.latent_dim)
     if args.load_model:
-        ssl_backbone.load(args, 'ssl', ft=True)
+        ssl_backbone.load(args, 'ssl', True)
         position_classifier.load(args)
         decoder.load(args)
         classification_head.load(args)
@@ -87,7 +87,7 @@ if args.model in ('ssl', 'all'):
         ssl_backbone, classification_head = fine_tune(supervised_train_dataloader,
                                         supervised_val_dataset,
                                         test_dataloader,
-                                        backbone,
+                                        ssl_backbone,
                                         classification_head,
                                         args)
 

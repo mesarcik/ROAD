@@ -32,8 +32,7 @@ def fine_tune(
         classification_head: trained classification_head
 
     """
-    model_path = 'outputs/{}/{}'.format(args.model,
-                                           args.model_name)
+    model_path = 'outputs/models/{}'.format(args.model_name)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -51,7 +50,7 @@ def fine_tune(
     total_step = len(supervised_train_dataloader)
     supervised_train_dataloader.dataset.set_supervision(False)
     _val_data = val_dataset.patch(val_dataset.data).float().to(args.device, dtype=torch.bfloat16)
-    _val_targets = val_dataset.labels !=len(defaults.anomalies)
+    _val_targets = val_dataset.labels 
     prev_acc = 0
 
     for epoch in range(1, 51):
@@ -90,7 +89,6 @@ def fine_tune(
                                                 beta=2,
                                                 multiclass=False)
                 val_acc = f_score[0]
-                #val_acc = torch.sum(_c == _labels) / _labels.shape[0]
                 running_acc += val_acc
 
                 tepoch.set_postfix(total_loss=loss.item(), 
@@ -99,13 +97,14 @@ def fine_tune(
             total_train_loss.append(running_loss / total_step)
             accuracies.append(running_acc/ total_step)
 
-            #if prev_acc < accuracies[-1]:  # TODO: check for model improvement, validation size too small
-            classification_head.save(args)
-            backbone.save(args,ft=True)
-            prev_acc=accuracies[-1]
-            backbone.eval()
-            classification_head.eval()
-            pred_ft, thr_ft = eval_classification_head(backbone.cpu(), classification_head.cpu(), test_dataloader, args)
+            if prev_acc < accuracies[-1]: 
+                classification_head.save(args)
+                backbone.save(args,'ssl', True)
+                prev_acc=accuracies[-1]
+
+            #backbone.eval()
+            #classification_head.eval()
+            #pred_ft, thr_ft = eval_classification_head(backbone.cpu(), classification_head.cpu(), test_dataloader, args)
 
             loss_curve(model_path,
                        epoch,
@@ -116,5 +115,5 @@ def fine_tune(
             classification_head.train()
 
     classification_head.load(args)
-    backbone.load(args,ft=True)
+    backbone.load(args,'ssl', True)
     return backbone, classification_head 

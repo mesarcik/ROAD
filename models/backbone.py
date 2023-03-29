@@ -28,12 +28,12 @@ class BackBone(nn.Module):
 
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def save(self, args, traning, ft=False):
-        fpath = self.fpath_from_name(args, ft)
+    def save(self, args, training, ft):
+        fpath = self.fpath_from_name(args, training, ft)
         torch.save(self.state_dict(), fpath)
 
-    def load(self, args, training, ft=False):
-        fpath = self.fpath_from_name(args, ft)
+    def load(self, args, training, ft):
+        fpath = self.fpath_from_name(args, training,  ft)
         self.load_state_dict(torch.load(fpath))
 
     def fpath_from_name(self, args, training, ft)->str:
