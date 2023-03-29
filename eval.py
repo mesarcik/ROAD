@@ -1,16 +1,16 @@
 import torch
 import faiss
 import numpy as np
-import gc
 import copy
 from torch.utils.data import DataLoader
+from thop import profile
 from models import VAE, BackBone, ClassificationHead, Decoder
 from utils import args
 from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from utils.reporting import save_results
-from utils.vis import io, knn_io
+from utils.vis import knn_io
 from data import get_data
-from utils.data import defaults, combine, reconstruct, reconstruct_distances
+from utils.data import defaults, combine
 #supress some division warnings from f_score calculations
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -180,7 +180,6 @@ def eval_vae(vae:VAE,
     
     defaults.anomalies.append(-1)
     for anomaly in defaults.anomalies:
-        gc.collect()
         z_test= []
         x_hat_test = []
         test_dataloader.dataset.set_anomaly_mask(anomaly)
@@ -457,4 +456,86 @@ def eval_knn(backbone: BackBone,
         print("N:{}, SUM_AUPRC: {:.4f}, SUM_F2: {:.4f}".format(N,auprcs[0],f_scores[0]))
     return comb, tholds[0]
 
+def eval_inference_time(backbone:BackBone,
+                        args:args,
+                        classification_head:ClassificationHead=None)->float:
+    """
+        Computes number of seconds per batch of dummy data
+        Adapted from: https://deci.ai/blog/measure-inference-time-deep-neural-networks/
+
+        Parameters
+        ----------
+        backbone: BackBone 
+        args: args
+        classification_head: optional parameter for ssl eval 
+
+        Returns
+        -------
+        throughput: spectrograms per second
+
+    """
+    backbone.to(args.device, dtype=torch.bfloat16)
+    backbone.eval()
+
+    supervised = classification_head is None
+
+    if supervised: 
+        dummy_input = torch.randn([args.batch_size, 
+                                   4, 
+                                   defaults.SIZE[0], 
+                                   defaults.SIZE[1]],
+                                   dtype=torch.bfloat16,
+                                   device=args.device)
+    else:
+        classification_head.to(args.device, dtype=torch.bfloat16)
+        dummy_input = torch.randn([args.batch_size, 
+                                   4, 
+                                   args.patch_size,
+                                   args.patch_size],
+                                   dtype=torch.bfloat16,
+                                   device=args.device)
+    repetitions = 100 
+    total_time = 0
+    with torch.no_grad():
+        for _ in range(repetitions): # n repetitions
+            starter, ender = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+            starter.record()
+            if supervised:
+                _ = backbone(dummy_input)
+            else:
+                _z = backbone(dummy_input)
+                z = _z.reshape([len(_z)//int(defaults.SIZE[0]//args.patch_size)**2, 
+                                args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
+                c = classification_head(z)
+            ender.record()
+            torch.cuda.synchronize()
+            curr_time = starter.elapsed_time(ender)/1000
+            total_time += curr_time
+
+    throughput =  (repetitions*args.batch_size)/total_time
+    print(f'Throughput:{throughput}\nTime per spectrogram: {total_time/(repetitions*args.batch_size)}')
+    return throughput
+
+def eval_macs(model:torch.nn.Module,
+              input_shape:tuple,
+              args:args) -> (float, float):
+    """
+        Computes number of MACS for a model
+        source: https://github.com/Lyken17/pytorch-OpCounter
+
+        Parameters
+        ----------
+        model: BackBone 
+        input_shape: tuple of dimensions of model input
+        args: args
+
+        Returns
+        -------
+        macs: number of macs of models
+        params: number of parameters of the model
+
+    """
+    model.to(args.device, dtype=torch.bfloat16)
+    dummy_input = torch.randn(input_shape, dtype=torch.bfloat16, device=args.device)
+    return profile(model, inputs=(dummy_input,))
 
