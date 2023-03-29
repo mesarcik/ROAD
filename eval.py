@@ -11,6 +11,9 @@ from utils.reporting import save_results
 from utils.vis import io, knn_io
 from data import get_data
 from utils.data import defaults, combine, reconstruct, reconstruct_distances
+#supress some division warnings from f_score calculations
+np.seterr(divide='ignore', invalid='ignore')
+
 
 def knn(z_test:np.array, 
         z_train:np.array, 
@@ -416,7 +419,7 @@ def eval_knn(backbone: BackBone,
             _D,
             _I,
             test_dataloader.dataset.labels,
-            'outputs/{}/{}'.format(args.model, args.model_name),
+            'outputs/models/{}'.format(args.model_name),
             args.epochs, 
             args,
             anomaly=anomaly) 

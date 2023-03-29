@@ -3,7 +3,7 @@ echo "Logging for hyperparams.sh at time: $(date)." >> log.log
 limit=None
 epochs=100
 seed=42 #$(openssl rand -hex 3)
-model=ssl
+model=all
 latent_dim=64
 patch_size=64
 [ "$model" = supervised ] &&
@@ -20,7 +20,7 @@ for amount in 1; do
 						  -backbone $backbone\
 						  -patch_size $patch_size\
 						  -data_path /data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_07-03-23.h5\
-						  -output_path outputs/LOFAR_refactor.csv\
+						  -output_path outputs/LOFAR_ouputs.csv\
 						  -batch_size $batch_size\
 						  -neighbours 5\
 						  -seed $seed| tee -a log.log 
