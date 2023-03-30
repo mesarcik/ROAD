@@ -11,15 +11,31 @@ from utils import args
 from utils.data import defaults
 from utils.data.patches import reconstruct
 
-def get_data(args, remove=None, transform=None):
+def get_data(args:args, 
+            remove:str=None, 
+            transform=None)->
+             (Dataset, Dataset, Dataset, Dataset, Dataset):
     """
         Constructs datasets and loaders for training, validation and testing
         Test data for supervised and unsupervised must be the same
 
+        Parameters
+        ----------
+        args: cmd args
+        remove: name of class to be excluded from training set 
+        transform: transform for dataloader 
+
+        Returns
+        -------
+        train_dataset: ... 
+        val_dataset: ... 
+        test_dataset: ...
+        supervised_train_dataset: ...
+        supervised_val_dataset: ...
     """
     hf = h5py.File(args.data_path,'r')
     test_indexes, train_indexes = train_test_split(np.arange(len(_join(hf, 'labels').astype(str))),
-                                                   test_size=0.5,
+                                                   test_size=args.percentage_data,
                                                    random_state=args.seed)
 
     _data = _join(hf, 'data')[train_indexes]
@@ -113,6 +129,7 @@ def _join(hf:h5py.File, field:str, compound:bool=False)->np.array:
         ----------
         hf: h5py dataset 
         field: the field that is meant to be concatenated along 
+        compound: if multiple features can be present in a spectrogram
 
         Returns
         -------
@@ -207,12 +224,28 @@ class LOFARDataset(Dataset):
     def set_supervision(self, supervised:bool)->None:
         """
             sets supervision flag
+
+            Parameters
+            ----------
+            supervised: ...
+
+            Returns
+            -------
+            None 
         """
         self.supervised = supervised
 
-    def remove_sources(self, remove):
+    def remove_sources(self, remove:np.array):
         """
             removes data corresponding source
+
+            Parameters
+            ----------
+            remove: array of sources to be removed
+
+            Returns
+            -------
+            None 
         """
         _, _, indxs = np.intersect1d(remove, self._source, assume_unique=True, return_indices=True)
         mask = [i not in indxs for i in range(len(self._source))]
@@ -227,6 +260,14 @@ class LOFARDataset(Dataset):
     def set_seed(self, seed:int)->None:
         """
             sets test data seed 
+
+            Parameters
+            ----------
+            seed: seed for split
+
+            Returns
+            -------
+            None 
         """
         self.test_seed = seed 
 
@@ -325,6 +366,18 @@ class LOFARDataset(Dataset):
         return _data, _frequency_band
 
     def encode_labels(self, labels:np.array)->np.array:
+        """
+           encodes labels to integer notation 
+            
+            Parameters
+            ----------
+            labels: array of strings 
+
+            Returns
+            -------
+            encoded_labels: array of ints 
+
+        """
         out = []
         for label in labels:
             if label =='':
@@ -363,6 +416,14 @@ class LOFARDataset(Dataset):
         """
             perpendicular polarisation normalisation
 
+            Parameters
+            ----------
+            data: ...
+
+            Returns
+            -------
+            normalised_data: ...
+
         """
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
@@ -375,14 +436,14 @@ class LOFARDataset(Dataset):
         _data = np.nan_to_num(_data, 0)
         return _data
             
-    def patch(self, _input:torch.tensor, verbose:bool=False) -> torch.tensor:
+    def patch(self, _input:torch.tensor) -> torch.tensor:
         """
             Makes (N,C,h,w) shaped tensor into (N*(h/size)*(w/size),C,h/size, w/size)
             Note: this only works for square patches sizes
             
             Parameters
             ----------
-            verbose: prints tqdm output
+            input: (N,C,H,w) tensor
 
             Returns
             -------
@@ -410,7 +471,8 @@ class LOFARDataset(Dataset):
 
             Returns
             -------
-            patches: tensor of patches reshaped to ((h/size)*(w/size),C,h/size, w/size)
+            context_neighbour: tensor of patches 
+            context_label: tensor of context labels
 
         """
 

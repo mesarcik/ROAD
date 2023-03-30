@@ -69,7 +69,7 @@ def integrate(error:np.array, args:args)->np.array:
 
 def compute_metrics(targets:np.array, 
                     predictions:np.array, 
-                    beta:int=2,
+                    beta:int=1,
                     multiclass=False)->(list, list):
     """
         Computes AUROC, AUPRC and F-beta for integrated data
