@@ -17,6 +17,7 @@ def save_results(args:args,**kwargs)->None:
         df = pd.DataFrame(columns = ['Model',
                                      'Name',
                                      'Percentage',
+                                     'OOD',
                                      'Latent_Dim',
                                      'Epoch',
                                      'Patch_Size',
@@ -25,7 +26,7 @@ def save_results(args:args,**kwargs)->None:
                                      'Neighbour',
                                      'ErrorType',
                                      'AUPRC',
-                                     'beta',
+                                     'Beta',
                                      'F-beta'])
     else:  
         df = pd.read_csv(args.output_path)
@@ -34,6 +35,7 @@ def save_results(args:args,**kwargs)->None:
                     pd.DataFrame({'Model':args.model,
                     'Name':args.model_name,
                     'Percentage':args.percentage_data,
+                    'OOD': args.ood,
                     'Latent_Dim':args.latent_dim,
                     'Epoch':kwargs['epoch'],
                     'Patch_Size':args.patch_size,
@@ -42,7 +44,7 @@ def save_results(args:args,**kwargs)->None:
                     'Neighbour':kwargs['neighbour'],
                     'ErrorType':kwargs['error_type'],
                     'AUPRC':kwargs['auprc'],
-                    'beta':kwargs['beta'],
+                    'Beta':kwargs['beta'],
                     'F-beta':kwargs['f_score']},index=[0])],
                     axis=0, join='outer', ignore_index=True)
 
