@@ -13,8 +13,7 @@ from utils.data.patches import reconstruct
 
 def get_data(args:args, 
             remove:str=None, 
-            transform=None)->
-             (Dataset, Dataset, Dataset, Dataset, Dataset):
+            transform=None)->(Dataset, Dataset, Dataset, Dataset, Dataset):
     """
         Constructs datasets and loaders for training, validation and testing
         Test data for supervised and unsupervised must be the same
@@ -327,6 +326,7 @@ class LOFARDataset(Dataset):
         for i, a in enumerate(defaults.percentage_comtamination):
             _amount = int(_len_*defaults.percentage_comtamination[a])
             _indices = [j for j, x in enumerate(labels) if x == i]
+            print(a, _amount, len(_indices))
             _indices = np.random.choice(_indices, _amount, replace=False)
             mask = np.concatenate([mask, _indices],axis=0)
         mask = np.concatenate([mask, [i for i, x in enumerate(labels) if x == len(defaults.anomalies)]],axis=0)

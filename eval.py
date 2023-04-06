@@ -69,7 +69,7 @@ def integrate(error:np.array, args:args)->np.array:
 
 def compute_metrics(targets:np.array, 
                     predictions:np.array, 
-                    beta:int=1,
+                    beta:int=2,
                     multiclass=False)->(list, list):
     """
         Computes AUROC, AUPRC and F-beta for integrated data
@@ -276,7 +276,7 @@ def eval_supervised(backbone:BackBone,
                 anomaly=anomaly,
                 epoch=args.epochs,
                 neighbour=-1,
-                beta=2, 
+                beta=1, 
                 error_type=output_label,
                 auprc=auprcs[i], 
                 f_score=f_scores[i])
