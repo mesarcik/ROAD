@@ -53,7 +53,7 @@ def fine_tune(
     _val_targets = val_dataset.labels 
     prev_acc = 0
 
-    for epoch in range(1, 51):
+    for epoch in range(1, 21):
         with tqdm(supervised_train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc  = 0.0,0.0
             for _data, _target, _, _  in tepoch:

@@ -96,6 +96,13 @@ if args.model in ('ssl', 'all'):
 if args.model  == 'all':
     pred, thr = eval_supervised(supervised_backbone, test_dataloader, args,  pred_ft, thr_ft)
 
+    for i in range(10):
+        test_dataloader.dataset.set_seed(np.random.randint(100))
+        pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
+        pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
+        pred, thr = eval_supervised(supervised_backbone, test_dataloader, args,  pred_ft, thr_ft)
+    
+
 
     ##plot_results(args.output_path,
     ##            f'outputs/{args.model}/{args.model_name}',  

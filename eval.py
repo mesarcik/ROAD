@@ -247,7 +247,7 @@ def eval_supervised(backbone:BackBone,
         predictions: predictions
         thresholds: thresholds 
     """
-    output_label = 'supervisd'
+    output_label = 'supervised'
     backbone.to(args.device, dtype=torch.bfloat16)
     backbone.eval()
     test_dataloader.dataset.set_supervision(True)

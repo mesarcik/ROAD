@@ -16,6 +16,7 @@ def save_results(args:args,**kwargs)->None:
     if not os.path.exists(args.output_path):
         df = pd.DataFrame(columns = ['Model',
                                      'Name',
+                                     'Backbone',
                                      'Percentage',
                                      'OOD',
                                      'Latent_Dim',
@@ -34,6 +35,7 @@ def save_results(args:args,**kwargs)->None:
     df = pd.concat([df, 
                     pd.DataFrame({'Model':args.model,
                     'Name':args.model_name,
+                    'Backbone':args.backbone,
                     'Percentage':args.percentage_data,
                     'OOD': args.ood,
                     'Latent_Dim':args.latent_dim,

@@ -1,5 +1,6 @@
 import torch
 from torchvision import models
+from vit_pytorch import ViT,SimpleViT
 from torch import nn
 
 class BackBone(nn.Module):
@@ -10,21 +11,64 @@ class BackBone(nn.Module):
             **kwargs) -> None:
         super(BackBone, self).__init__()
 
-        assert (model_type == 'resnet50' or
-                model_type == 'resnet18'), 'Backbone not defined'
+        assert (model_type == 'resnet18' or
+                model_type == 'resnet50' or 
+                model_type == 'resnet101' or 
+                model_type == 'resnet152' or 
+                model_type == 'vit'), 'Backbone not defined'
 
         self.in_channels = in_channels
         self.out_dims = out_dims
         self.model_type = model_type
 
-        if model_type == 'resnet50':
-            self.resnet = models.resnet50(weights=None)
-            self.resnet.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
+        if model_type == 'resnet152':
+            self.model = models.resnet152(weights=None)
+            self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
                                      stride=(2, 2), 
                                      padding=(3, 3), 
                                      bias=False)
-            self.resnet.fc = nn.Linear(2048,  self.out_dims)
+            #TODO
+            self.model.fc = nn.Linear(2048,  self.out_dims)
+
+        elif model_type == 'resnet101':
+            self.model = models.resnet101(weights=None)
+            self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
+                                     kernel_size=(7, 7), 
+                                     stride=(2, 2), 
+                                     padding=(3, 3), 
+                                     bias=False)
+            #TODO
+            self.model.fc = nn.Linear(2048,  self.out_dims)
+
+        elif model_type == 'resnet50':
+            self.model = models.resnet50(weights=None)
+            self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
+                                     kernel_size=(7, 7), 
+                                     stride=(2, 2), 
+                                     padding=(3, 3), 
+                                     bias=False)
+            self.model.fc = nn.Linear(2048,  self.out_dims)
+
+        elif model_type == 'resnet18':
+            self.model = models.resnet18(weights=None)
+            self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
+                                     kernel_size=(7, 7), 
+                                     stride=(2, 2), 
+                                     padding=(3, 3), 
+                                     bias=False)
+            self.model.fc = nn.Linear(512,  self.out_dims)
+
+        elif model_type == 'vit':
+            self.model = SimpleViT(
+                            image_size = 64,
+                            channels=self.in_channels,
+                            patch_size = 16,
+                            num_classes = self.out_dims,
+                            dim = args.out_dims,
+                            depth = 6,
+                            heads = 16,
+                            mlp_dim = 2048)
 
         self.loss_fn = nn.CrossEntropyLoss()
 
@@ -42,12 +86,12 @@ class BackBone(nn.Module):
     def forward(self, 
                 z: torch.tensor,
                 **kwargs):
-        c = self.resnet(z)
+        c = self.model(z)
         return c
 
     def embed(self, 
             input:torch.tensor) -> torch.tensor:
-        modules=list(self.resnet.children())[:-1]
+        modules=list(self.model.children())[:-1]
         model=nn.Sequential(*modules)
         return model(input)[...,0,0] # remove the last two 1,1 dims
 
