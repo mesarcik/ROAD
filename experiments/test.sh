@@ -1,13 +1,11 @@
 #!/bin/bash
 echo "Logging for hyperparams.sh at time: $(date)." >> log.log
 limit=None
-epochs=50
+epochs=250
 model=all
 latent_dim=64
 patch_size=64
-[ "$model" = supervised ] &&
-   batch_size=64||
-   batch_size=64
+batch_size=64
 amount=1
 
 for backbone in vit; do 

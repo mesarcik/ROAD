@@ -13,7 +13,7 @@ anomalies = [
     'source_in_sidelobes',
     'solar_storm']
 
-percentage_comtamination = {'oscillating_tile':0.04,
+percentage_comtamination = {'oscillating_tile':0.035,
                             #'real_high_noise':0.13,
                             'first_order_high_noise':0.045,
                             #'third_order_high_noise':0.06,

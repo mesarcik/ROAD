@@ -8,6 +8,7 @@ class BackBone(nn.Module):
             in_channels: int,
             out_dims: int, 
             model_type:str='resnet50',
+            supervision=False, 
             **kwargs) -> None:
         super(BackBone, self).__init__()
 
@@ -60,15 +61,28 @@ class BackBone(nn.Module):
             self.model.fc = nn.Linear(512,  self.out_dims)
 
         elif model_type == 'vit':
+            if supervision: 
+                image_size=256
+                patch_size=32
+            else: 
+                image_size=64
+                patch_size=8
             self.model = SimpleViT(
-                            image_size = 64,
+                            image_size = image_size,
                             channels=self.in_channels,
-                            patch_size = 16,
+                            patch_size = patch_size,
                             num_classes = self.out_dims,
-                            dim = args.out_dims,
-                            depth = 6,
+                            dim = 512,
+                            depth = 4,
                             heads = 16,
-                            mlp_dim = 2048)
+                            mlp_dim = 1024)
+
+        elif model_type == 'convnext':
+            self.model = models.convnext_tiny(weights=None)
+            self.model.features[0][0] = nn.Conv2d(self.in_channels, 96,  #increase the number of channels to channels
+                                     kernel_size=(4, 4), 
+                                     stride=(4, 4))
+            self.model.classifier[-1]  = nn.Linear(768, self.out_dims)
 
         self.loss_fn = nn.CrossEntropyLoss()
 
