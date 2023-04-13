@@ -1,14 +1,14 @@
 #!/bin/bash
 echo "Logging for hyperparams.sh at time: $(date)." >> log.log
 limit=None
-epochs=250
-model=all
+epochs=100
+model=ssl
 latent_dim=64
 patch_size=64
 batch_size=64
 amount=1
 
-for backbone in vit; do 
+for backbone in resnet18 resnet50 resnet101 vit convnext; do 
 		python -u main.py -model $model\
 						  -limit $limit \
 						  -epochs $epochs \

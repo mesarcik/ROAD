@@ -16,7 +16,8 @@ class BackBone(nn.Module):
                 model_type == 'resnet50' or 
                 model_type == 'resnet101' or 
                 model_type == 'resnet152' or 
-                model_type == 'vit'), 'Backbone not defined'
+                model_type == 'vit' or
+                model_type == 'convnext'), 'Backbone not defined'
 
         self.in_channels = in_channels
         self.out_dims = out_dims

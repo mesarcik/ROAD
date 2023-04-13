@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 import torch 
+import torchvision.transforms.functional as F
+import torchvision.transforms as T
 from torch.utils.data import Dataset, DataLoader
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -190,7 +192,9 @@ class LOFARDataset(Dataset):
         self._data = torch.from_numpy(self.normalise(data)).permute(0,3,1,2)
         self._frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
 
-        self.transform=transform 
+        self.resizer = T.RandomResizedCrop(scale=(0.95,1.0), size=(args.patch_size, 
+                                                                  args.patch_size))
+        self.transform = transform
         self.set_anomaly_mask(-1)
 
     def __len__(self):
@@ -553,7 +557,8 @@ class LOFARDataset(Dataset):
                     #[-self.n_patches-1, -self.n_patches, -self.n_patches+1]
                     #[-1               ,       X        ,                 1]
                     #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
-                context_images_neighbour[_indx,:] = temp_patches[_patch_index + _locations[context_labels[_indx]]]
+                resized_patch = self.resizer(temp_patches[_patch_index + _locations[context_labels[_indx]]])
+                context_images_neighbour[_indx,:] = resized_patch 
                 _indx +=1
         context_labels = torch.from_numpy(context_labels)
         context_images_neighbour = torch.from_numpy(context_images_neighbour)
