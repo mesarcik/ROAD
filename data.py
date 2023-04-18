@@ -192,7 +192,7 @@ class LOFARDataset(Dataset):
         self._data = torch.from_numpy(self.normalise(data)).permute(0,3,1,2)
         self._frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
 
-        self.resizer = T.RandomResizedCrop(scale=(0.95,1.0), size=(args.patch_size, 
+        self.resizer = T.RandomResizedCrop(scale=(1.0-args.resize_amount,1.0), size=(args.patch_size, 
                                                                   args.patch_size))
         self.transform = transform
         self.set_anomaly_mask(-1)
