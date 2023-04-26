@@ -163,7 +163,7 @@ class LOFARDataset(Dataset):
 
         self.supervised = supervised
         self.test = test
-        self.test_seed=42
+        self.test_seed=args.seed
         self.remove=remove
 
         if roll:

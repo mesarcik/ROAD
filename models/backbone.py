@@ -13,6 +13,7 @@ class BackBone(nn.Module):
         super(BackBone, self).__init__()
 
         assert (model_type == 'resnet18' or
+                model_type == 'resnet34' or 
                 model_type == 'resnet50' or 
                 model_type == 'resnet101' or 
                 model_type == 'resnet152' or 
@@ -54,6 +55,15 @@ class BackBone(nn.Module):
 
         elif model_type == 'resnet18':
             self.model = models.resnet18(weights=None)
+            self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
+                                     kernel_size=(7, 7), 
+                                     stride=(2, 2), 
+                                     padding=(3, 3), 
+                                     bias=False)
+            self.model.fc = nn.Linear(512,  self.out_dims)
+
+        elif model_type == 'resnet34':
+            self.model = models.resnet34(weights=None)
             self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
                                      stride=(2, 2), 
