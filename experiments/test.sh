@@ -1,23 +1,27 @@
 #!/bin/bash
 echo "Logging for hyperparams.sh at time: $(date)." >> log.log
 limit=None
-epochs=250
-seed=42 #$(openssl rand -hex 3)
-model=position_classifier
+epochs=50
+model=all
 latent_dim=64
 patch_size=64
-batch_size=128
+batch_size=64
+amount=1
+backbone=resnet34
+resize_amount=0.25
 
-for amount in 1; do 
+for repeat in 1 2 3; do 
 		python -u main.py -model $model\
 						  -limit $limit \
 						  -epochs $epochs \
 						  -latent_dim $latent_dim \
 						  -amount $amount\
+						  -backbone $backbone\
 						  -patch_size $patch_size\
-						  -data_path /data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_07-03-23.h5\
-						  -output_path outputs/LOFAR_amounts.csv\
+						  -data_path /data/mmesarcik/LOFAR/LOFAR_AD/constructed_lofar_ad_dataset_06-04-23.h5\
+						  -output_path outputs/LOFAR_resnet18_repeats.csv\
+						  -resize_amount $resize_amount\
 						  -batch_size $batch_size\
-						  -neighbours 5\
-						  -seed $seed| tee -a log.log 
+						  -seed $(openssl rand 1 | od -DAn)\
+						  -neighbours 5 | tee -a log.log 
 done 

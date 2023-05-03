@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 import torch 
+import torchvision.transforms.functional as F
+import torchvision.transforms as T
 from torch.utils.data import Dataset, DataLoader
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -11,15 +13,30 @@ from utils import args
 from utils.data import defaults
 from utils.data.patches import reconstruct
 
-def get_data(args, remove=None, transform=None):
+def get_data(args:args, 
+            remove:str=None, 
+            transform=None)->(Dataset, Dataset, Dataset, Dataset, Dataset):
     """
         Constructs datasets and loaders for training, validation and testing
         Test data for supervised and unsupervised must be the same
 
+        Parameters
+        ----------
+        args: cmd args
+        remove: name of class to be excluded from training set 
+        transform: transform for dataloader 
+
+        Returns
+        -------
+        train_dataset: ... 
+        val_dataset: ... 
+        test_dataset: ...
+        supervised_train_dataset: ...
+        supervised_val_dataset: ...
     """
     hf = h5py.File(args.data_path,'r')
     test_indexes, train_indexes = train_test_split(np.arange(len(_join(hf, 'labels').astype(str))),
-                                                   test_size=0.5,
+                                                   test_size=args.percentage_data,
                                                    random_state=args.seed)
 
     _data = _join(hf, 'data')[train_indexes]
@@ -34,7 +51,7 @@ def get_data(args, remove=None, transform=None):
                                                  _labels,
                                                  _frequency_band, 
                                                  _source,
-                                                 test_size=0.02, 
+                                                 test_size=0.05, 
                                                  random_state=args.seed)
 
     supervised_train_dataset = LOFARDataset(train_data, 
@@ -113,6 +130,7 @@ def _join(hf:h5py.File, field:str, compound:bool=False)->np.array:
         ----------
         hf: h5py dataset 
         field: the field that is meant to be concatenated along 
+        compound: if multiple features can be present in a spectrogram
 
         Returns
         -------
@@ -145,7 +163,7 @@ class LOFARDataset(Dataset):
 
         self.supervised = supervised
         self.test = test
-        self.test_seed=42
+        self.test_seed=args.seed
         self.remove=remove
 
         if roll:
@@ -174,7 +192,9 @@ class LOFARDataset(Dataset):
         self._data = torch.from_numpy(self.normalise(data)).permute(0,3,1,2)
         self._frequency_band = torch.from_numpy(frequency_band).permute(0,3,1,2)
 
-        self.transform=transform 
+        self.resizer = T.RandomResizedCrop(scale=(1.0-args.resize_amount,1.0), size=(args.patch_size, 
+                                                                  args.patch_size))
+        self.transform = transform
         self.set_anomaly_mask(-1)
 
     def __len__(self):
@@ -193,27 +213,42 @@ class LOFARDataset(Dataset):
         else:
             label = np.repeat(self.labels[idx], self.n_patches**2, axis=0)
             datum =  self.patch(self.data[idx:idx+1,...])
-            frequency = np.random.random(len(label))#self.patch(self._frequency_band[idx])[0,0,[0,-1]]#TODO fix frequncy encoding
+            #frequency = np.random.random(len(label))#self.patch(self._frequency_band[idx])[0,0,[0,-1]]#TODO fix frequncy encoding
 
             (context_label, 
-             context_image_neighbour,
-             context_frequency_neighbour) = self.context_prediction(datum)
+             context_image_neighbour) = self.context_prediction(datum)
 
             if self.transform:
                 datum = self.transform(datum)
 
-            return datum, label, frequency, context_label, context_image_neighbour, context_frequency_neighbour
+            return datum, label, context_label, context_image_neighbour 
 
 
     def set_supervision(self, supervised:bool)->None:
         """
             sets supervision flag
+
+            Parameters
+            ----------
+            supervised: ...
+
+            Returns
+            -------
+            None 
         """
         self.supervised = supervised
 
-    def remove_sources(self, remove):
+    def remove_sources(self, remove:np.array):
         """
             removes data corresponding source
+
+            Parameters
+            ----------
+            remove: array of sources to be removed
+
+            Returns
+            -------
+            None 
         """
         _, _, indxs = np.intersect1d(remove, self._source, assume_unique=True, return_indices=True)
         mask = [i not in indxs for i in range(len(self._source))]
@@ -228,6 +263,14 @@ class LOFARDataset(Dataset):
     def set_seed(self, seed:int)->None:
         """
             sets test data seed 
+
+            Parameters
+            ----------
+            seed: seed for split
+
+            Returns
+            -------
+            None 
         """
         self.test_seed = seed 
 
@@ -287,6 +330,7 @@ class LOFARDataset(Dataset):
         for i, a in enumerate(defaults.percentage_comtamination):
             _amount = int(_len_*defaults.percentage_comtamination[a])
             _indices = [j for j, x in enumerate(labels) if x == i]
+            print(a, _amount, len(_indices))
             _indices = np.random.choice(_indices, _amount, replace=False)
             mask = np.concatenate([mask, _indices],axis=0)
         mask = np.concatenate([mask, [i for i, x in enumerate(labels) if x == len(defaults.anomalies)]],axis=0)
@@ -326,6 +370,18 @@ class LOFARDataset(Dataset):
         return _data, _frequency_band
 
     def encode_labels(self, labels:np.array)->np.array:
+        """
+           encodes labels to integer notation 
+            
+            Parameters
+            ----------
+            labels: array of strings 
+
+            Returns
+            -------
+            encoded_labels: array of ints 
+
+        """
         out = []
         for label in labels:
             if label =='':
@@ -364,6 +420,14 @@ class LOFARDataset(Dataset):
         """
             perpendicular polarisation normalisation
 
+            Parameters
+            ----------
+            data: ...
+
+            Returns
+            -------
+            normalised_data: ...
+
         """
         _data = np.zeros(data.shape)
         for i, spec in enumerate(data):
@@ -376,14 +440,14 @@ class LOFARDataset(Dataset):
         _data = np.nan_to_num(_data, 0)
         return _data
             
-    def patch(self, _input:torch.tensor, verbose:bool=False) -> torch.tensor:
+    def patch(self, _input:torch.tensor) -> torch.tensor:
         """
             Makes (N,C,h,w) shaped tensor into (N*(h/size)*(w/size),C,h/size, w/size)
             Note: this only works for square patches sizes
             
             Parameters
             ----------
-            verbose: prints tqdm output
+            input: (N,C,H,w) tensor
 
             Returns
             -------
@@ -401,7 +465,7 @@ class LOFARDataset(Dataset):
                 self.args.patch_size)
         return patches
 
-    def context_prediction(self, data:torch.tensor) -> (torch.tensor, torch.tensor, torch.tensor):
+    def context_prediction(self, data:torch.tensor) -> (torch.tensor, torch.tensor):
         """
             Arranges a context prediction dataset
             
@@ -411,7 +475,8 @@ class LOFARDataset(Dataset):
 
             Returns
             -------
-            patches: tensor of patches reshaped to ((h/size)*(w/size),C,h/size, w/size)
+            context_neighbour: tensor of patches 
+            context_label: tensor of context labels
 
         """
 
@@ -420,7 +485,6 @@ class LOFARDataset(Dataset):
                                              data.shape[1],
                                              self.args.patch_size, 
                                              self.args.patch_size],dtype='float32')
-        context_frequency_neighbour = np.zeros([data.shape[0]],dtype='int')
         _indx = 0
         _locations = [-self.n_patches-1, -self.n_patches, -self.n_patches+1, -1, +1, +self.n_patches-1, +self.n_patches, +self.n_patches+1]
 
@@ -493,12 +557,11 @@ class LOFARDataset(Dataset):
                     #[-self.n_patches-1, -self.n_patches, -self.n_patches+1]
                     #[-1               ,       X        ,                 1]
                     #[+self.n_patches-1, +self.n_patches, +self.n_patches+1]
-                context_images_neighbour[_indx,:] = temp_patches[_patch_index + _locations[context_labels[_indx]]]
-                context_frequency_neighbour[_indx] = temp_freq[context_labels[_indx]]
+                resized_patch = self.resizer(temp_patches[_patch_index + _locations[context_labels[_indx]]])
+                context_images_neighbour[_indx,:] = resized_patch 
                 _indx +=1
         context_labels = torch.from_numpy(context_labels)
         context_images_neighbour = torch.from_numpy(context_images_neighbour)
-        context_frequency_neighbour= torch.from_numpy(context_frequency_neighbour)
 
-        return context_labels, context_images_neighbour, context_frequency_neighbour
+        return context_labels, context_images_neighbour 
 
