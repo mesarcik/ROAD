@@ -80,7 +80,7 @@ def create_dataset()->None:
     test_group = hf.create_group('test_data')
     anomalies_group = hf.create_group('anomaly_data')
 
-    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_06-03-23.pkl', 'rb') as f:
+    with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_05-04-23.pkl', 'rb') as f:
         data, labels, source, ids, frequency_band, flags = cPickle.load(f,encoding='latin')
   
     data, labels, source, ids, frequency_band  = remove_singles(data, 
@@ -131,8 +131,8 @@ def create_dataset()->None:
                                                         ('unknown' not in l) and 
                                                         ('scintillation' not in l) and 
                                                         ('real_high_noise' not in l) and 
-                                                        ('ionosphere' not in l) and 
-                                                        ('electric_fence' not in l) and 
+                                                        (('ionosphere' not in l) or ('_ionosphere' in l)) and 
+                                                        #('electric_fence' not in l) and 
                                                         ('high_noise_elements' not in l))]              
         print(anomaly, len(test_inds))
 
