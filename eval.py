@@ -276,10 +276,22 @@ def eval_supervised(backbone:BackBone,
                 anomaly=anomaly,
                 epoch=args.epochs,
                 neighbour=-1,
-                beta=1, 
+                beta=2, 
                 error_type=output_label,
                 auprc=auprcs[i], 
                 f_score=f_scores[i])
+
+    auprcs, f_scores, tholds = compute_metrics(targets, 
+                                              predictions!=len(defaults.anomalies), 
+                                              multiclass=False)
+    save_results(args, 
+            anomaly='-1',
+            epoch=args.epochs,
+            neighbour=-1,
+            beta=2, 
+            error_type='supervised',
+            auprc=auprcs[0], 
+            f_score=f_scores[0])
     return predictions, tholds
 
 def eval_classification_head(backbone:BackBone, 

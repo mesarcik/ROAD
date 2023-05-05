@@ -83,7 +83,7 @@ if args.model in ('ssl', 'all'):
                 decoder,
                 args)
 
-        pred_knn, thr_knn = eval_knn(ssl_backbone, decoder, test_dataloader, train_dataloader, args)
+        #pred_knn, thr_knn = eval_knn(ssl_backbone, decoder, test_dataloader, train_dataloader, args)
 
         ssl_backbone, classification_head = fine_tune(supervised_train_dataloader,
                                         supervised_val_dataset,
