@@ -44,7 +44,7 @@ def fine_tune(
     optimizer = torch.optim.Adam(
         list(classification_head.parameters())+list(backbone.parameters()),
         lr=1e-4)  # , lr=0.0001, momentum=0.9)
-
+    bce_loss = nn.BCELoss()
     total_train_loss = []
     accuracies= []
     total_step = len(supervised_train_dataloader)
@@ -68,7 +68,7 @@ def fine_tune(
                                 args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
                 _c = classification_head(Z).squeeze(1)
                 _labels = _target!=len(defaults.anomalies)
-                loss = classification_head.loss_fn(_c,_labels.to(args.device, dtype=torch.bfloat16))
+                loss = bce_loss(_c,_labels.to(args.device, dtype=torch.bfloat16))
 
                 loss.backward()
                 optimizer.step()

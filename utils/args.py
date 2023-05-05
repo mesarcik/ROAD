@@ -40,7 +40,7 @@ if args.model_name is None:
 else: 
     args.load_model = True
 
-args.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 torch.manual_seed(args.seed)
 random.seed(args.seed)

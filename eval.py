@@ -368,15 +368,16 @@ def eval_knn(backbone: BackBone,
         -------
         predictions: boolean predictions
     """
+
     if args.model == 'vae':
         backbone.to(args.device, dtype=torch.bfloat16)
         backbone.eval()
-
     else:
         backbone.to(args.device, dtype=torch.bfloat16)
         decoder.to(args.device, dtype=torch.bfloat16)
         backbone.eval()
         decoder.eval()
+
 
     test_dataloader.dataset.set_supervision(False)
     train_dataloader.dataset.set_supervision(False)

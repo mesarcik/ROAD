@@ -332,7 +332,6 @@ class LOFARDataset(Dataset):
         for i, a in enumerate(defaults.percentage_comtamination):
             _amount = int(_len_*defaults.percentage_comtamination[a])
             _indices = [j for j, x in enumerate(labels) if x == i]
-            print(a, _amount, len(_indices))
             _indices = np.random.choice(_indices, _amount, replace=False)
             mask = np.concatenate([mask, _indices],axis=0)
         mask = np.concatenate([mask, [i for i, x in enumerate(labels) if x == len(defaults.anomalies)]],axis=0)

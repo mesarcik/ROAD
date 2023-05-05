@@ -39,7 +39,7 @@ def train_vae(train_dataloader: DataLoader,
     train_loss = []
     total_step = len(train_dataloader)
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(1, args.epochs//2 + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
             for _data, _, _, _, _, _ in tepoch:
@@ -103,9 +103,11 @@ def train_supervised(
         os.makedirs(model_path)
 
     backbone.to(args.device, dtype=torch.bfloat16)
+
     optimizer = torch.optim.Adam(
         backbone.parameters(),
         lr=args.learning_rate)  # , lr=0.0001, momentum=0.9)
+    
     train_loss, validation_accuracies = [], []
     total_step = len(supervised_train_dataloader)
     supervised_train_dataloader.dataset.set_supervision(True)
@@ -114,7 +116,7 @@ def train_supervised(
     _val_targets = val_dataset.labels
     prev_acc = 0
     
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(1, args.epochs//2 + 1):
         with tqdm(supervised_train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc = 0.0, 0.0
             for _data, _target, _source in tepoch:
@@ -152,7 +154,7 @@ def train_supervised(
                        epoch,
                        total_loss=train_loss,
                        validation_accuracy=validation_accuracies,
-                       descriptor='resnet')
+                       descriptor='supervised')
             backbone.train()
     backbone.load(args, 'supervised',False)
     return backbone 
