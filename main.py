@@ -31,8 +31,6 @@ supervised_train_dataloader = DataLoader(supervised_train_dataset,
 test_dataloader = DataLoader(test_dataset,
                              batch_size=args.batch_size,
                              shuffle=False)
-test_dataloader.dataset.set_seed(np.random.randint(100))
-
 if args.model == 'vae':
     vae = VAE(in_channels=4,
             latent_dim=args.latent_dim,
@@ -95,17 +93,9 @@ if args.model in ('ssl', 'all'):
     pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
 
 if args.model  == 'all':
-    pred, thr = eval_supervised(supervised_backbone, test_dataloader, args,  pred_ft, thr_ft)
-
     for i in range(10):
-        test_dataloader.dataset.set_seed(np.random.randint(100))
+        test_dataloader.dataset.set_seed(np.random.randint(1000))
         pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
         pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
         pred, thr = eval_supervised(supervised_backbone, test_dataloader, args,  pred_ft, thr_ft)
     
-
-
-    ##plot_results(args.output_path,
-    ##            f'outputs/{args.model}/{args.model_name}',  
-    ##            args.model_name,
-    ##            np.max(args.neighbours))

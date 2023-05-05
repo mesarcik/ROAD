@@ -274,6 +274,7 @@ class LOFARDataset(Dataset):
             None 
         """
         self.test_seed = seed 
+        self.set_anomaly_mask(-1)
 
     def set_anomaly_mask(self, anomaly:int):
         """
