@@ -42,7 +42,7 @@ if args.model == 'vae':
         vae = train_vae(train_dataloader, vae, args)
     pred, thr = eval_knn(vae, None, test_dataloader, train_dataloader, args)
 
-elif args.model in ('supervised', 'all'):
+elif args.model in ('supervised', 'all', 'random_init'):
     supervised_backbone = BackBone(in_channels=4,
             out_dims=len(defaults.anomalies)+1,
             model_type=args.backbone,
@@ -56,7 +56,7 @@ elif args.model in ('supervised', 'all'):
                 args)
     pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
 
-if args.model in ('ssl', 'all'):
+if args.model in ('ssl', 'all', 'random_init'):
     ssl_backbone = BackBone(in_channels=4,
             out_dims=args.latent_dim,
             model_type=args.backbone)
@@ -74,12 +74,13 @@ if args.model in ('ssl', 'all'):
         decoder.load(args)
         classification_head.load(args)
     else:
-        ssl_backbone, position_classifier, decoder = train_ssl(train_dataloader,
-                val_dataset,
-                ssl_backbone,
-                position_classifier,
-                decoder,
-                args)
+        if args.model != 'random_init':
+            ssl_backbone, position_classifier, decoder = train_ssl(train_dataloader,
+                    val_dataset,
+                    ssl_backbone,
+                    position_classifier,
+                    decoder,
+                    args)
 
         #pred_knn, thr_knn = eval_knn(ssl_backbone, decoder, test_dataloader, train_dataloader, args)
 
@@ -92,7 +93,7 @@ if args.model in ('ssl', 'all'):
 
     pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
 
-if args.model  == 'all':
+if args.model  in ('all', 'random_init'):
     for i in range(10):
         test_dataloader.dataset.set_seed(np.random.randint(1000))
         pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)

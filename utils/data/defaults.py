@@ -3,7 +3,7 @@ anomalies = [
     'oscillating_tile',
     #'real_high_noise',
     'first_order_high_noise',
-    'electric_fence',
+    #'electric_fence',
     'first_order_data_loss',
     'third_order_data_loss',
     'lightning',
