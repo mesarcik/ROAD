@@ -69,7 +69,7 @@ def integrate(error:np.array, args:args)->np.array:
 
 def compute_metrics(targets:np.array, 
                     predictions:np.array, 
-                    beta:int=2,
+                    beta:float=2,
                     multiclass=False)->(list, list):
     """
         Computes AUROC, AUPRC and F-beta for integrated data
@@ -345,6 +345,7 @@ def eval_classification_head(backbone:BackBone,
             auprc=auprcs[0], 
             f_score=f_scores[0])
 
+    auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=False ,beta=0.5)
     return predictions, tholds
 
 def eval_knn(backbone: BackBone,
