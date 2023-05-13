@@ -28,7 +28,7 @@ def train_vae(train_dataloader: DataLoader,
         -------
         data: list of baselines with single channels removed
     """
-    model_path = 'outputs/models/{}'.format(args.model_name)
+    model_path = f'{args.model_path}/outputs/models/{args.model_name}'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -39,7 +39,7 @@ def train_vae(train_dataloader: DataLoader,
     train_loss = []
     total_step = len(train_dataloader)
 
-    for epoch in range(1, args.epochs//2 + 1):
+    for epoch in range(1, args.epochs + 1):
         with tqdm(train_dataloader, unit="batch") as tepoch:
             running_loss = 0.0
             for _data, _, _, _, _, _ in tepoch:
@@ -98,7 +98,7 @@ def train_supervised(
         backbone: backbone 
 
     """
-    model_path = 'outputs/models/{}'.format(args.model_name)
+    model_path = f'{args.model_path}/outputs/models/{args.model_name}'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -116,7 +116,7 @@ def train_supervised(
     _val_targets = val_dataset.labels
     prev_acc = 0
     
-    for epoch in range(1, args.epochs//2 + 1):
+    for epoch in range(1, args.epochs + 1):
         with tqdm(supervised_train_dataloader, unit="batch") as tepoch:
             running_loss, running_acc = 0.0, 0.0
             for _data, _target, _source in tepoch:
@@ -181,7 +181,7 @@ def train_ssl(train_dataloader: DataLoader,
         model: trained resnet
 
     """
-    model_path = 'outputs/models/{}'.format(args.model_name)
+    model_path = f'{args.model_path}/outputs/models/{args.model_name}'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 

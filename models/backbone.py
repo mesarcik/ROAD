@@ -106,7 +106,7 @@ class BackBone(nn.Module):
         self.load_state_dict(torch.load(fpath))
 
     def fpath_from_name(self, args, training, ft)->str:
-        return f'outputs/models/{args.model_name}/backbone_{training}_{args.ood}_{args.seed}_{args.pretrain}_{ft}.pkl'
+        return f'{args.model_path}/outputs/models/{args.model_name}/backbone_{training}_{args.ood}_{args.seed}_{args.pretrain}_{ft}.pkl'
 
     def forward(self, 
                 z: torch.tensor,

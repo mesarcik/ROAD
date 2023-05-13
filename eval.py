@@ -100,7 +100,7 @@ def compute_metrics(targets:np.array,
                     predictions==encoding)
             auprcs.append(auc(recall, precision))
 
-            f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*recall+precision))
+            f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*precision+recall))
             f_scores.append(np.max(f_betas))
             tholds.append(thresholds[np.argmax(f_betas)])
     else:
@@ -109,7 +109,7 @@ def compute_metrics(targets:np.array,
                 predictions)
         auprcs.append(auc(recall, precision))
 
-        f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*recall+precision))
+        f_betas = np.nan_to_num((1+beta**2)*recall*precision/((beta**2)*precision+recall))
         f_scores.append(np.max(f_betas))
         tholds.append(thresholds[np.argmax(f_betas)])
 
@@ -345,7 +345,7 @@ def eval_classification_head(backbone:BackBone,
             auprc=auprcs[0], 
             f_score=f_scores[0])
 
-    auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=False ,beta=0.5)
+    auprcs, f_scores, tholds = compute_metrics(targets, predictions, multiclass=False ,beta=2)
     return predictions, tholds
 
 def eval_knn(backbone: BackBone,
@@ -432,7 +432,7 @@ def eval_knn(backbone: BackBone,
             _D,
             _I,
             test_dataloader.dataset.labels,
-            'outputs/models/{}'.format(args.model_name),
+            f'{args.model_path}/outputs/models/{args.model_name}',
             args.epochs, 
             args,
             anomaly=anomaly) 
