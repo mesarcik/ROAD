@@ -38,7 +38,21 @@ if args.model_name is None:
     args.model_name = new_name()
     args.load_model = False
 else: 
-    args.load_model = True
+    try:
+        with open(f'outputs/models/{args.model_name}/model.config', 'r') as f:
+            # Load configuration file values
+             d = {}
+             for line in f:
+                (key, val) = line.strip().replace(' ', '').split(':')
+                d[key] = val
+        args.load_model = True
+        args.seed = int(d['seed'])
+        args.backbone = d['backbone']
+    except FileNotFoundError:
+        raise FileNotFoundError(errno.ENOENT, 
+                                os.strerror(errno.ENOENT), 
+                                f'outputs/models/{args.model_name}/model.config')
+
 
 args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
