@@ -289,7 +289,7 @@ def eval_supervised(backbone:BackBone,
             epoch=args.epochs,
             neighbour=np.max(args.neighbours),
             beta=2, 
-            error_type='supervised',
+            error_type=output_label,
             auprc=auprcs[0], 
             f_score=f_scores[0])
     return predictions, tholds
