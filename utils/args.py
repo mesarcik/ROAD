@@ -51,6 +51,7 @@ else:
         args.seed = int(d['seed'])
         args.backbone = d['backbone']
         args.ood = int(d['ood'])
+        args.percentage_data = float(d['percentage_data'])
     except FileNotFoundError:
         raise FileNotFoundError(errno.ENOENT, 
                                 os.strerror(errno.ENOENT), 
