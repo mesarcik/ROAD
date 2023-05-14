@@ -54,7 +54,7 @@ elif args.model in ('supervised', 'all', 'random_init'):
                 supervised_val_dataset,
                 supervised_backbone,
                 args)
-    pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
+    #pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
 
 if args.model in ('ssl', 'all', 'random_init'):
     ssl_backbone = BackBone(in_channels=4,
@@ -91,7 +91,7 @@ if args.model in ('ssl', 'all', 'random_init'):
                                         classification_head,
                                         args)
 
-    pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
+    #pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
 
 if args.model  in ('all', 'random_init'):
     for i in range(10):

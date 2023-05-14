@@ -165,6 +165,10 @@ class LOFARDataset(Dataset):
         self.test = test
         self.test_seed=args.seed
         self.remove=remove
+        self.args = args
+        self.anomaly_mask = []
+        self.original_anomaly_mask = []
+        self.n_patches = int(defaults.SIZE[0]/args.patch_size)
 
         if roll:
             _data, _frequency_band = self.circular_shift(data, 
@@ -174,6 +178,14 @@ class LOFARDataset(Dataset):
             frequency_band= np.concatenate([frequency_band, _frequency_band],axis=0)
             labels = np.concatenate([labels, labels],axis=0)
             source = np.concatenate([source, source],axis=0)
+        
+        if not self.test and args.ood != -1:
+            np.random.seed(self.test_seed)
+            classes = np.random.choice(defaults.anomalies, size=args.ood, replace=False)
+            print(f'removing {classes}')
+            mask = np.ones(len(labels), dtype=bool)
+            for c in classes:
+                mask = np.logical_and(mask, labels != c)
             
         if remove is not None:
             mask = labels!=remove
@@ -182,10 +194,6 @@ class LOFARDataset(Dataset):
             data = data[mask]
             frequency_band = frequency_band[mask]
 
-        self.args = args
-        self.anomaly_mask = []
-        self.original_anomaly_mask = []
-        self.n_patches = int(defaults.SIZE[0]/args.patch_size)
         
         self._labels = torch.from_numpy(self.encode_labels(labels))
         self._source = source

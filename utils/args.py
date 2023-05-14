@@ -44,11 +44,13 @@ else:
             # Load configuration file values
              d = {}
              for line in f:
+                if 'cuda:' in line: continue #bug with previous version writing the device
                 (key, val) = line.strip().replace(' ', '').split(':')
                 d[key] = val
         args.load_model = True
         args.seed = int(d['seed'])
         args.backbone = d['backbone']
+        args.ood = int(d['ood'])
     except FileNotFoundError:
         raise FileNotFoundError(errno.ENOENT, 
                                 os.strerror(errno.ENOENT), 
