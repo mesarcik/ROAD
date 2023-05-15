@@ -38,6 +38,8 @@ def get_data(args:args,
     test_indexes, train_indexes = train_test_split(np.arange(len(_join(hf, 'labels').astype(str))),
                                                    test_size=args.percentage_data,
                                                    random_state=args.seed)
+    if args.percentage_data != 0.5:
+        test_indexes = test_indexes[:len(_join(hf, 'labels'))//2] #to always test on 50% of the data 
 
     _data = _join(hf, 'data')[train_indexes]
     _labels = _join(hf, 'labels').astype(str)[train_indexes]
