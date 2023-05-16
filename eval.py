@@ -472,7 +472,8 @@ def eval_knn(backbone: BackBone,
 
 def eval_inference_time(backbone:BackBone,
                         args:args,
-                        classification_head:ClassificationHead=None)->float:
+                        classification_head:ClassificationHead=None,
+                        _knn:bool=False)->float:
     """
         Computes number of seconds per batch of dummy data
         Adapted from: https://deci.ai/blog/measure-inference-time-deep-neural-networks/
@@ -482,36 +483,40 @@ def eval_inference_time(backbone:BackBone,
         backbone: BackBone 
         args: args
         classification_head: optional parameter for ssl eval 
+        _knn: optinal parameter to evaluate knn
 
         Returns
         -------
         throughput: spectrograms per second
 
     """
+    torch.cuda.empty_cache()
     backbone.to(args.device, dtype=torch.bfloat16)
     backbone.eval()
 
     supervised = classification_head is None
 
     if supervised: 
-        dummy_input = torch.randn([args.batch_size, 
-                                   4, 
-                                   defaults.SIZE[0], 
-                                   defaults.SIZE[1]],
-                                   dtype=torch.bfloat16,
-                                   device=args.device)
+        size = defaults.SIZE[0]
+        batch_size=args.batch_size
     else:
-        classification_head.to(args.device, dtype=torch.bfloat16)
-        dummy_input = torch.randn([args.batch_size, 
-                                   4, 
-                                   args.patch_size,
-                                   args.patch_size],
-                                   dtype=torch.bfloat16,
-                                   device=args.device)
-    repetitions = 100 
+        if not _knn:
+            classification_head.to(args.device, dtype=torch.bfloat16)
+            classification_head.eval()
+        size=args.patch_size
+        batch_size=args.batch_size*((defaults.SIZE[0]//args.patch_size)**2)
+    if _knn: z_0 = np.random.random([1000, 64])
+    repetitions = 100
     total_time = 0
+    peak_memory = 0
     with torch.no_grad():
         for _ in range(repetitions): # n repetitions
+            dummy_input = torch.randn([batch_size, 
+                                       4, 
+                                       size,
+                                       size],
+                                       dtype=torch.bfloat16,
+                                       device=args.device)
             starter, ender = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
             starter.record()
             if supervised:
@@ -520,14 +525,20 @@ def eval_inference_time(backbone:BackBone,
                 _z = backbone(dummy_input)
                 z = _z.reshape([len(_z)//int(defaults.SIZE[0]//args.patch_size)**2, 
                                 args.latent_dim*int(defaults.SIZE[0]//args.patch_size)**2])
-                c = classification_head(z)
+                if _knn: 
+                    _ = knn(z.float().cpu().detach().numpy(), z_0, N=5) 
+                else:
+                    c = classification_head(z)
             ender.record()
             torch.cuda.synchronize()
             curr_time = starter.elapsed_time(ender)/1000
             total_time += curr_time
+            if peak_memory < torch.cuda.max_memory_allocated():
+                peak_memory = torch.cuda.max_memory_allocated()
+                #seems to be the same as torch.cuda.memory_stats(args.device)['active_bytes.all.peak']
 
     throughput =  (repetitions*args.batch_size)/total_time
-    print(f'Throughput:{throughput}\nTime per spectrogram: {total_time/(repetitions*args.batch_size)}')
+    print(f'Throughput:{throughput}\nTime per spectrogram: {total_time/(repetitions*args.batch_size)}s\nPeak Memory consumption={peak_memory/1e9}')
     return throughput
 
 def eval_macs(model:torch.nn.Module,
