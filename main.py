@@ -42,7 +42,7 @@ if args.model == 'vae':
         vae = train_vae(train_dataloader, vae, args)
     pred, thr = eval_knn(vae, None, test_dataloader, train_dataloader, args)
 
-elif args.model in ('supervised', 'all', 'random_init'):
+elif args.model in ('supervised', 'all', 'random_init', 'dknn'):
     supervised_backbone = BackBone(in_channels=4,
             out_dims=len(defaults.anomalies)+1,
             model_type=args.backbone,
@@ -56,10 +56,13 @@ elif args.model in ('supervised', 'all', 'random_init'):
                 args)
     #pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)
 
-if args.model in ('ssl', 'all', 'random_init'):
+if args.model in ('ssl', 'all', 'random_init', 'dknn'):
+    if args.model == 'dknn': weight_init='DEFAULT'
+    else: weight_init=None
     ssl_backbone = BackBone(in_channels=4,
             out_dims=args.latent_dim,
-            model_type=args.backbone)
+            model_type=args.backbone,
+            weight_init=weight_init)
     position_classifier = PositionClassifier(latent_dim=args.latent_dim,
             out_dims=8)
     decoder = Decoder(out_channels=4,
@@ -74,7 +77,7 @@ if args.model in ('ssl', 'all', 'random_init'):
         decoder.load(args)
         classification_head.load(args)
     else:
-        if args.model != 'random_init':
+        if args.model != 'random_init' and args.model !='dknn':
             ssl_backbone, position_classifier, decoder = train_ssl(train_dataloader,
                     val_dataset,
                     ssl_backbone,
@@ -93,7 +96,7 @@ if args.model in ('ssl', 'all', 'random_init'):
 
     #pred_ft, thr_ft = eval_classification_head(ssl_backbone, classification_head, test_dataloader, args)
 
-if args.model  in ('all', 'random_init'):
+if args.model  in ('all', 'random_init', 'dknn'):
     for i in range(10):
         test_dataloader.dataset.set_seed(np.random.randint(1000))
         pred, thr = eval_supervised(supervised_backbone, test_dataloader, args)

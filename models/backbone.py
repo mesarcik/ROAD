@@ -8,7 +8,8 @@ class BackBone(nn.Module):
             in_channels: int,
             out_dims: int, 
             model_type:str='resnet50',
-            supervision=False, 
+            supervision:bool=False, 
+            weight_init:str=None,
             **kwargs) -> None:
         super(BackBone, self).__init__()
 
@@ -25,7 +26,7 @@ class BackBone(nn.Module):
         self.model_type = model_type
 
         if model_type == 'resnet152':
-            self.model = models.resnet152(weights=None)
+            self.model = models.resnet152(weights=weight_init)
             self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
                                      stride=(2, 2), 
@@ -35,7 +36,7 @@ class BackBone(nn.Module):
             self.model.fc = nn.Linear(2048,  self.out_dims)
 
         elif model_type == 'resnet101':
-            self.model = models.resnet101(weights=None)
+            self.model = models.resnet101(weights=weight_init)
             self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
                                      stride=(2, 2), 
@@ -45,7 +46,7 @@ class BackBone(nn.Module):
             self.model.fc = nn.Linear(2048,  self.out_dims)
 
         elif model_type == 'resnet50':
-            self.model = models.resnet50(weights=None)
+            self.model = models.resnet50(weights=weight_init)
             self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
                                      stride=(2, 2), 
@@ -54,7 +55,7 @@ class BackBone(nn.Module):
             self.model.fc = nn.Linear(2048,  self.out_dims)
 
         elif model_type == 'resnet18':
-            self.model = models.resnet18(weights=None)
+            self.model = models.resnet18(weights=weight_init)
             self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
                                      stride=(2, 2), 
@@ -63,7 +64,7 @@ class BackBone(nn.Module):
             self.model.fc = nn.Linear(512,  self.out_dims)
 
         elif model_type == 'resnet34':
-            self.model = models.resnet34(weights=None)
+            self.model = models.resnet34(weights=weight_init)
             self.model.conv1 = nn.Conv2d(self.in_channels, 64,  #increase the number of channels to channels
                                      kernel_size=(7, 7), 
                                      stride=(2, 2), 
@@ -89,7 +90,7 @@ class BackBone(nn.Module):
                             mlp_dim = 1024)
 
         elif model_type == 'convnext':
-            self.model = models.convnext_tiny(weights=None)
+            self.model = models.convnext_tiny(weights=weight_init)
             self.model.features[0][0] = nn.Conv2d(self.in_channels, 96,  #increase the number of channels to channels
                                      kernel_size=(4, 4), 
                                      stride=(4, 4))
