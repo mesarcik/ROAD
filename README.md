@@ -8,5 +8,5 @@ The labelling interface is based on [label-studio](https://labelstud.io/). To ge
 ```
 and
 ```
-./webserver.temp /home/mmesarcik/data/LOFAR/compressed/LOFAR_AD/LOFAR_AD_v1/ *.png files.temp 8081
+./webserver /home/mmesarcik/data/LOFAR/compressed/LOFAR_AD/LOFAR_AD_v1/ *.png files 8081
 ````
