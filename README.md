@@ -1,4 +1,4 @@
-# RAAD
+# `ROAD`: The Radio Observatory Anomaly Detector
 
 
 ## Labelling with label-studio:
