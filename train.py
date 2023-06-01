@@ -223,10 +223,10 @@ def train_ssl(train_dataloader: DataLoader,
                 _data = combine(_data, 0, 2).float().to(args.device,
                                                         dtype=torch.bfloat16)
                 _context_neighbour = combine(_context_neighbour, 0, 2).float()
-                _context_neighbour.to(args.device,
-                                      dtype=torch.bfloat16)
+                _context_neighbour = _context_neighbour.to(args.device,
+                                                           dtype=torch.bfloat16)
                 _context_label = combine(_context_label, 0, 2)
-                _context_label.to(args.device, dtype=torch.long)
+                _context_label = _context_label.to(args.device, dtype=torch.long)
 
                 backbone_optimizer.zero_grad()
                 position_classifier_optimizer.zero_grad()
@@ -268,7 +268,7 @@ def train_ssl(train_dataloader: DataLoader,
                 _data = _data.float().to(args.device, dtype=torch.bfloat16)
 
                 _neighbour = _neighbour.float()
-                _neighbour.to(args.device, dtype=torch.bfloat16)
+                _neighbour = _neighbour.to(args.device, dtype=torch.bfloat16)
                 z_data = backbone(_data)
                 z_neighbour = backbone(_neighbour)
 
