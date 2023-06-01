@@ -1,9 +1,11 @@
 import numpy as np
 import torch
-from utils import args 
+from utils import args
 
 
-def combine(x:torch.tensor, dim_begin:int, dim_end:int)->torch.tensor:
+def combine(x:torch.tensor,
+            dim_begin:int,
+            dim_end:int)->torch.tensor:
     """
         Joins together axis from dim_begin to dim_end
 
@@ -37,8 +39,8 @@ def reconstruct_distances(distances:np.array, args:args):
     """
 
     dists = np.mean(distances, axis = tuple(range(1,distances.ndim)))
-    dists = np.array([[d]*args.patch_size**2 for d in dists]).reshape(len(dists), 
-                                                                args.patch_size, 
+    dists = np.array([[d]*args.patch_size**2 for d in dists]).reshape(len(dists),
+                                                                args.patch_size,
                                                                 args.patch_size)
 
     dists_recon = reconstruct(np.expand_dims(dists,axis=1),args)
@@ -69,7 +71,7 @@ def reconstruct(data, args:args, verbose:bool=False) -> torch.tensor:
     n_patches = 256//args.patch_size # only for square patches 
     N_orig = data.shape[0]//n_patches**2
     unfold_shape = (N_orig, n_patches, n_patches, data.shape[1], args.patch_size, args.patch_size)
-    
+
     _data = data.view(unfold_shape)
     _data = _data.permute(0, 3, 1, 4, 2, 5).contiguous()
     _data = _data.view([N_orig, data.shape[1], 256, 256])

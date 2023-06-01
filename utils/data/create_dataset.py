@@ -1,9 +1,9 @@
-import _pickle as cPickle
 import numpy as np
 import h5py
-import random 
+import random
 from tqdm import tqdm
-from utils.data.defaults import anomalies, SIZE 
+import _pickle as cPickle
+from utils.data.defaults import anomalies, SIZE
 import cv2
 import copy
 from datetime import datetime
@@ -26,17 +26,20 @@ def remove_singles(data: list, *args) -> list:
     _args = []
     indx = [i for i, d in enumerate(data) if d.shape[1] !=1]
     _data = [_data[i] for i in indx]
-    
+
     if args:
-        for a in args:
+        for _a in args:
             temp_args = []
             for i in indx:
-                temp_args.append(a[i])
+                temp_args.append(_a[i])
             _args.append(temp_args)
         return _data,*_args
     return _data
 
-def reshape(data: list, frequency_band:list, dim: list, verbose:bool=False) -> np.array:
+def reshape(data: list,
+            frequency_band:list,
+            dim: list,
+            verbose:bool=False) -> (np.array, np.array):
     """
         Resamples data and frequency_band to be of size dim
         
@@ -82,15 +85,15 @@ def create_dataset()->None:
 
     with open('/data/mmesarcik/LOFAR/LOFAR_AD/LOFAR_AD_dataset_05-04-23.pkl', 'rb') as f:
         data, labels, source, ids, frequency_band, flags = cPickle.load(f,encoding='latin')
-  
-    data, labels, source, ids, frequency_band  = remove_singles(data, 
-                                                                labels, 
+
+    data, labels, source, ids, frequency_band  = remove_singles(data,
+                                                                labels,
                                                                 source,
                                                                 ids,
                                                                 frequency_band)
 
 
-    data, frequency_band = reshape(data, frequency_band, SIZE) 
+    data, frequency_band = reshape(data, frequency_band, SIZE)
 
     labels = [('-').join(l) for l in labels]
 
@@ -132,7 +135,7 @@ def create_dataset()->None:
                                                         ('scintillation' not in l) and 
                                                         ('real_high_noise' not in l) and 
                                                         (('ionosphere' not in l) or ('_ionosphere' in l)) and 
-                                                        #('electric_fence' not in l) and 
+                                                        ('electric_fence' not in l) and 
                                                         ('high_noise_elements' not in l))]              
         print(anomaly, len(test_inds))
 

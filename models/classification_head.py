@@ -1,18 +1,23 @@
-import torch
-from torchvision import models
-from torch import nn
+"""
+    Classification head
+"""
 import os
+import torch
+from torch import nn
+
 
 class ClassificationHead(nn.Module):
-    def __init__(self, 
-            out_dims: int, 
-            latent_dim: int, 
-            **kwargs) -> None:
+    """
+        ...
+    """
+    def __init__(self,
+            out_dims: int,
+            latent_dim: int) -> None:
         super(ClassificationHead, self).__init__()
         self.out_dims =  out_dims
         self.latent_dim = latent_dim
 
-        # classifier  
+        # classifier 
         modules  = []
         modules.append(nn.Linear(16*self.latent_dim, 8)) # 16 because 64x64 patches
         modules.append(nn.LeakyReLU())
@@ -41,8 +46,8 @@ class ClassificationHead(nn.Module):
         return c
 
     def loss_function(self,
-                      c:torch.tensor, 
-                      labels:torch.tensor, 
+                      c:torch.tensor,
+                      labels:torch.tensor,
                       **kwargs) -> dict:
         """
         Computes the BCE loss function

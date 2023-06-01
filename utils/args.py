@@ -1,10 +1,9 @@
 import argparse
 import os
-#from utils.data import sizes 
+import numpy as np
 from coolname import generate_slug as new_name
 import torch
 import random
-import numpy as np
 
 parser = argparse.ArgumentParser(description='Radio Astronomy Anomaly Detection (RAAD)')
 
@@ -35,15 +34,14 @@ parser.add_argument('-resize_amount', metavar='-ra', type=float, default=0.05,  
 
 args = parser.parse_args()
 
-if args.model_name is None: 
+if args.model_name is None:
     args.model_name = new_name()
     args.load_model = False
-else: 
+else:
     try:
         with open(f'{args.model_path}/outputs/models/{args.model_name}/model.config', 'r') as f:
-            # Load configuration file values
-             d = {}
-             for line in f:
+            d = {}
+            for line in f:
                 if 'cuda:' in line: continue #bug with previous version writing the device
                 (key, val) = line.strip().replace(' ', '').split(':')
                 d[key] = val
@@ -53,8 +51,8 @@ else:
         args.ood = int(d['ood'])
         args.percentage_data = float(d['percentage_data'])
     except FileNotFoundError:
-        raise FileNotFoundError(errno.ENOENT, 
-                                os.strerror(errno.ENOENT), 
+        raise FileNotFoundError(errno.ENOENT,
+                                os.strerror(errno.ENOENT),
                                 f'{args.model_path}/outputs/models/{args.model_name}/model.config')
 
 
