@@ -53,8 +53,8 @@ def fine_tune(supervised_train_dataloader: DataLoader,
     accuracies = []
     total_step = len(supervised_train_dataloader)
     supervised_train_dataloader.dataset.set_supervision(False)
-    _val_data = val_dataset.patch(val_dataset.data).float()
-    _val_data.to(args.device, dtype=torch.bfloat16)
+    _val_data = val_dataset.patch(val_dataset.data).float().to(args.device,
+                                                               dtype=torch.bfloat16)
     _val_targets = val_dataset.labels
     prev_acc = 0
 
@@ -63,10 +63,10 @@ def fine_tune(supervised_train_dataloader: DataLoader,
             running_loss, running_acc = 0.0, 0.0
             for _data, _target, _, _ in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
-                _data = combine(_data, 0, 2).float()
-                _data.to(args.device, dtype=torch.bfloat16)
-                _target = _target[:, 0]
-                _target.to(args.device, dtype=torch.long)
+                _data = combine(_data, 0, 2).float().to(args.device,
+                                                        dtype=torch.bfloat16)
+                _target = _target[:, 0].to(args.device,
+                                           dtype=torch.long)
 
                 optimizer.zero_grad()
 
