@@ -245,7 +245,7 @@ def train_ssl(train_dataloader: DataLoader,
                                                       hat_neighbour) +
                                 decoder.loss_function(_data,
                                                       hat_data))
-                reg_loss = 0.00001*(torch.sum(torch.square(z_data)) +
+                reg_loss = (1e-6)*(torch.sum(torch.square(z_data)) +
                                     torch.sum(torch.square(z_neighbour)))
 
                 loss = location_loss + decoder_loss + reg_loss
