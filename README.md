@@ -24,7 +24,7 @@ Install dependancies by running:
 ```
 
 ## Dataset  
-You will need to download the [ROAD dataset]([https://zenodo.org/record/6724065](https://zenodo.org/record/8028045)) and specify the its path using `-data_path` command line option.
+You will need to download the [ROAD dataset](https://zenodo.org/record/8028045) and specify the its path using `-data_path` command line option.
 
 
 
@@ -37,6 +37,7 @@ or to run for all backbones
 ```
     ./experiments/test.sh
 ```
+Alternatively the [model weights](https://zenodo.org/record/8060501) can be downloaded and specified using the  `-model_name` and `-model_path` flags.
 
 
 ## Labelling with label-studio:
