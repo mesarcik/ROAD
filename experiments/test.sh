@@ -10,7 +10,7 @@ amount=1
 resize_amount=0.25
 percentage_data=0.5
 
-for backbone in resnet18 resnet34 resnet50 resnet101; do
+for backbone in resnet18 resnet34 resnet50 resnet101 vit convnext; do
     for repeat in 1 2 3 ; do 
             python -u main.py -model $model\
                               -limit $limit \
