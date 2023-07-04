@@ -1,6 +1,6 @@
 # `ROAD`: The Radio Observatory Anomaly Detector
 
-A repository containing the implementation of the paper entitled [The ROAD to discovery: machine learning-driven anomaly detection in radio astronomy spectrograms](...)
+A repository containing the implementation of the paper entitled [The ROAD to discovery: machine learning-driven anomaly detection in radio astronomy spectrograms](https://arxiv.org/abs/2307.01054)
 
 
 ## Installation 
