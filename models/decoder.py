@@ -1,13 +1,14 @@
+"""
+    Decoder 
+"""
+import os
 import torch
 from torch import nn
-import torch.nn.functional as F
-import numpy as np
-import os
 
 class Decoder(nn.Module):
-    def __init__(self, 
-            out_channels:int, 
-            patch_size:int, 
+    def __init__(self,
+            out_channels:int,
+            patch_size:int,
             latent_dim:int,
             n_layers:int):
         super().__init__()
@@ -24,7 +25,6 @@ class Decoder(nn.Module):
         self.decoder_input = nn.Linear(self.latent_dim, self.hidden_dims[0]*(self.intermediate**2))
         #self.decoder_input = nn.Linear(self.latent_dim, self.patch_size)
 
-        
         for i in range(self.n_layers - 1):
             modules.append(
                 nn.Sequential(
@@ -66,7 +66,7 @@ class Decoder(nn.Module):
         self.load_state_dict(torch.load(fpath))
 
     def fpath_from_name(self,args)->str:
-        return f'outputs/models/{args.model_name}/decoder_{args.ood}_{args.seed}_{args.pretrain}.pkl'
+        return f'{args.model_path}/outputs/models/{args.model_name}/decoder_{args.ood}_{args.seed}_{args.pretrain}.pkl'
 
 
     def loss_function(self,
@@ -77,7 +77,7 @@ class Decoder(nn.Module):
         return loss
 
     def forward(self, 
-            input:torch.tensor)->torch.tensor:
+            input: torch.tensor) -> torch.tensor:
         x = self.decoder_input(input)
         x = x.view(-1, self.hidden_dims[0], self.intermediate, self.intermediate)
         x = self.decoder(x)
